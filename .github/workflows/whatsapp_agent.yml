@@ -16,7 +16,7 @@ on:
       debug:
         description: 'Enable SSH Debugging (tmate)'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:
@@ -66,9 +66,9 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Setup tmate session (DEBUG)
+      - name: Setup tmate session (MANUAL DEBUG)
+        if: ${{ inputs.debug == true }}
         uses: mxschmitt/action-tmate@v3
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug == 'true' }}
 
       - name: Run AI Agent
         env:
