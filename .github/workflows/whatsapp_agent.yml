@@ -65,13 +65,13 @@ jobs:
       - name: Run AI Agent
         env:
           MAX_TOOL_OUTPUT: 60000
-          AGENT_PROMPT: ${{ github.event.inputs.prompt || secrets.AGENT_PROMPT }}
+          AGENT_PROMPT: ${{ github.event.inputs.prompt || secrets.AGENT_PROMPT || vars.AGENT_PROMPT }}
         run: |
           python -m ai_agent.main \
             --model "gemma4:31b-cloud" \
             --ollama-url "https://ollama.com" \
-            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
-            --whatsapp "${{ secrets.WHATSAPP_NUMBER }}" \
+            --ollama-key "${{ secrets.OLLAMA_API_KEY || vars.OLLAMA_API_KEY }}" \
+            --whatsapp "${{ secrets.WHATSAPP_NUMBER || vars.WHATSAPP_NUMBER }}" \
             --whatsapp-url "http://localhost:3000" \
             --prompt "$AGENT_PROMPT" \
             --quiet
