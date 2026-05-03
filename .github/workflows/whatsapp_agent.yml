@@ -66,6 +66,7 @@ jobs:
           MAX_TOOL_OUTPUT: 60000
           AGENT_PROMPT1: ${{ vars.AGENT_PROMPT1 }}
           AGENT_PROMPT2: ${{ vars.AGENT_PROMPT2 }}
+          AGENT_PROMPT3: ${{ vars.AGENT_PROMPT3 }}
         run: |
           python -m ai_agent.main \
             --model "gemma4:31b-cloud" \
@@ -83,4 +84,13 @@ jobs:
             --whatsapp "${{ secrets.WHATSAPP_NUMBER2 }}" \
             --whatsapp-url "http://localhost:3000" \
             --prompt "$AGENT_PROMPT2" \
+            --quiet
+
+          python -m ai_agent.main \
+            --model "gemma4:31b-cloud" \
+            --ollama-url "https://ollama.com" \
+            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
+            --whatsapp "${{ secrets.WHATSAPP_NUMBER3 }}" \
+            --whatsapp-url "http://localhost:3000" \
+            --prompt "$AGENT_PROMPT3" \
             --quiet
