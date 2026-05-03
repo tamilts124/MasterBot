@@ -9,16 +9,6 @@ on:
   push:
     branches: [ main, master ]
   workflow_dispatch:
-    inputs:
-      prompt:
-        description: 'AI Agent Prompt'
-        required: false
-      debug:
-        description: 'Enable Pinggy SSH Debugging'
-        required: false
-        default: false
-        type: boolean
-
 
 jobs:
   run-agent:
@@ -57,13 +47,7 @@ jobs:
           sleep 15
           docker ps
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-          cache: 'pip'
       - name: Setup Pinggy SSH (DEBUG)
-        if: ${{ inputs.debug == true }}
         run: |
           sudo apt-get update && sudo apt-get install -y openssh-server
           echo "runner:debug123" | sudo chpasswd
@@ -75,27 +59,5 @@ jobs:
           cat pinggy.log
           echo "PASSWORD: debug123"
           echo "=========================================================="
-          # Keep it open for 1 hour if debug is on
+          # Keep it open for 1 hour
           sleep 3600
-
-      - name: Install Python Dependencies
-        if: ${{ inputs.debug == false }}
-        run: |
-          pip install -r requirements.txt
-
-      - name: Run AI Agent
-        if: ${{ inputs.debug == false }}
-        env:
-          MAX_TOOL_OUTPUT: 60000
-          AGENT_PROMPT: ${{ vars.AGENT_PROMPT }}
-        run: |
-          python -m ai_agent.main \
-            --model "gemma4:31b-cloud" \
-            --ollama-url "https://ollama.com" \
-            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
-            --whatsapp "${{ secrets.WHATSAPP_NUMBER }}" \
-            --whatsapp-url "http://localhost:3000" \
-            --prompt "$AGENT_PROMPT" \
-            --quiet
-
-
