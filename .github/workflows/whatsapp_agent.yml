@@ -8,7 +8,12 @@ on:
     - cron: '00 22 * * *'
   push:
     branches: [ main, master ]
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'AI Agent Prompt'
+        required: false
+        default: ''
 
 jobs:
   run-agent:
@@ -60,7 +65,7 @@ jobs:
       - name: Run AI Agent
         env:
           MAX_TOOL_OUTPUT: 60000
-          AGENT_PROMPT: "${{ secrets.AGENT_PROMPT }}"
+          AGENT_PROMPT: ${{ github.event.inputs.prompt || secrets.AGENT_PROMPT }}
         run: |
           python -m ai_agent.main \
             --model "gemma4:31b-cloud" \
@@ -68,4 +73,5 @@ jobs:
             --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
             --whatsapp "${{ secrets.WHATSAPP_NUMBER }}" \
             --whatsapp-url "http://localhost:3000" \
+            --prompt "$AGENT_PROMPT" \
             --quiet
