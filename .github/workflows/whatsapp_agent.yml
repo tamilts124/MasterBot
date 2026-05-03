@@ -13,7 +13,11 @@ on:
       prompt:
         description: 'AI Agent Prompt'
         required: false
-        default: ''
+      debug:
+        description: 'Enable SSH Debugging (tmate)'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   run-agent:
@@ -62,16 +66,20 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Setup tmate session (DEBUG)
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.debug == 'true' }}
+
       - name: Run AI Agent
         env:
           MAX_TOOL_OUTPUT: 60000
-          AGENT_PROMPT: ${{ github.event.inputs.prompt || secrets.AGENT_PROMPT || vars.AGENT_PROMPT }}
+          AGENT_PROMPT: ${{ vars.AGENT_PROMPT }}
         run: |
           python -m ai_agent.main \
             --model "gemma4:31b-cloud" \
             --ollama-url "https://ollama.com" \
-            --ollama-key "${{ secrets.OLLAMA_API_KEY || vars.OLLAMA_API_KEY }}" \
-            --whatsapp "${{ secrets.WHATSAPP_NUMBER || vars.WHATSAPP_NUMBER }}" \
+            --ollama-key "${{ vars.OLLAMA_API_KEY }}" \
+            --whatsapp "${{ vars.WHATSAPP_NUMBER }}" \
             --whatsapp-url "http://localhost:3000" \
             --prompt "$AGENT_PROMPT" \
             --quiet
