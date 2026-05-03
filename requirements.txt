@@ -1,0 +1,10 @@
+langchain
+langchain-openai
+langchain-community
+requests
+beautifulsoup4
+pydantic
+python-dotenv
+httpx
+certifi
+ddgs

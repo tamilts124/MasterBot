@@ -1,0 +1,71 @@
+name: WhatsApp AI Agent Automation
+
+on:
+  schedule:
+    # 5:00 AM IST is 11:30 PM UTC (previous day)
+    - cron: '30 23 * * *'
+    # 10:00 PM UTC (as specified)
+    - cron: '00 22 * * *'
+  push:
+    branches: [ main, master ]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  run-agent:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout AI CLI Repository
+        uses: actions/checkout@v4
+
+      - name: Clone WhatsApp API Repository
+        run: |
+          git clone https://github.com/tamilts124/WhatsApp_API.git
+          cd WhatsApp_API
+          # Ensure auth_info directory exists
+          mkdir -p auth_info
+
+      - name: Install 7-Zip
+        run: sudo apt-get update && sudo apt-get install -y p7zip-full
+
+      - name: Decrypt and Extract Session Data
+        run: |
+          7z x auth_info.7z -p"${{ secrets.AUTH_INFO_PASSWORD }}" -o./WhatsApp_API/
+          # Move files if they were extracted into a nested folder, or ensure the path is correct
+          # Assuming auth_info.7z contains the 'auth_info' folder itself.
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and Run WhatsApp API
+        working-directory: ./WhatsApp_API
+        run: |
+          docker build -t whatsapp-api .
+          docker run -d --name wa-service -p 3000:3000 whatsapp-api
+          # Wait for the service to initialize
+          echo "Waiting for WhatsApp API to start..."
+          sleep 15
+          docker ps
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run AI Agent
+        env:
+          MAX_TOOL_OUTPUT: 60000
+        run: |
+          python -m ai_agent.main \
+            --model "gemma4:31b-cloud" \
+            --ollama-url "https://ollama.com" \
+            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
+            --whatsapp "${{ secrets.WHATSAPP_NUMBER }}" \
+            --whatsapp-url "http://localhost:3000" \
+            --prompt "${{ secrets.AGENT_PROMPT }}" \
+            --quiet
