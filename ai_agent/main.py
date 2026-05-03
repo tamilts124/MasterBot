@@ -84,8 +84,7 @@ def main(argv: List[str] | None = None) -> None:
 
     message_history: List[Union[HumanMessage, AIMessage]] = []
 
-    def process_query(query: str) -> bool:
-        """Process a single query and return True if successful."""
+    def process_query(query: str):
         human_msg = HumanMessage(content=query)
         if use_history:
             message_history.append(human_msg)
@@ -93,7 +92,6 @@ def main(argv: List[str] | None = None) -> None:
         else:
             msgs_to_send = [human_msg]
 
-        success = True
         if streaming:
             if not quiet:
                 print("Agent: ", end="", flush=True)
@@ -113,7 +111,6 @@ def main(argv: List[str] | None = None) -> None:
                     print(f"\n[Error] Streaming failed: {exc}")
                 else:
                     print(exc, file=sys.stderr)
-                success = False
         else:
             try:
                 result = agent.invoke({"messages": msgs_to_send})
@@ -122,11 +119,6 @@ def main(argv: List[str] | None = None) -> None:
                     print(f"Agent: {reply_text}\n")
                 else:
                     print(reply_text.strip())
-                
-                # Check for critical connection errors in reply
-                if "not connected" in reply_text.lower():
-                    success = False
-
                 if use_history:
                     message_history.append(AIMessage(content=reply_text))
             except Exception as exc:
@@ -134,12 +126,9 @@ def main(argv: List[str] | None = None) -> None:
                     print(f"[Error] Agent call failed: {exc}\n")
                 else:
                     print(exc, file=sys.stderr)
-                success = False
-        return success
 
     if single_prompt:
-        if not process_query(single_prompt):
-            sys.exit(1)
+        process_query(single_prompt)
         return
 
     try:
