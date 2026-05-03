@@ -84,6 +84,7 @@ jobs:
 
 
       - name: Run AI Agent
+        if: ${{ inputs.debug != true }}
         env:
           MAX_TOOL_OUTPUT: 60000
           AGENT_PROMPT: ${{ vars.AGENT_PROMPT }}
