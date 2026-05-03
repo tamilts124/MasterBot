@@ -60,6 +60,7 @@ jobs:
       - name: Run AI Agent
         env:
           MAX_TOOL_OUTPUT: 60000
+          AGENT_PROMPT: "${{ secrets.AGENT_PROMPT }}"
         run: |
           python -m ai_agent.main \
             --model "gemma4:31b-cloud" \
@@ -67,5 +68,4 @@ jobs:
             --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
             --whatsapp "${{ secrets.WHATSAPP_NUMBER }}" \
             --whatsapp-url "http://localhost:3000" \
-            --prompt "${{ secrets.AGENT_PROMPT }}" \
             --quiet
