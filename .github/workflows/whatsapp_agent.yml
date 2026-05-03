@@ -14,10 +14,11 @@ on:
         description: 'AI Agent Prompt'
         required: false
       debug:
-        description: 'Enable SSH Debugging (tmate)'
+        description: 'Enable Pinggy SSH Debugging'
         required: false
         default: false
         type: boolean
+
 
 jobs:
   run-agent:
@@ -61,29 +62,39 @@ jobs:
         with:
           python-version: '3.10'
           cache: 'pip'
-
+      - name: Setup Pinggy SSH (DEBUG)
+        if: ${{ inputs.debug == true }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y openssh-server
+          echo "runner:debug123" | sudo chpasswd
+          sudo service ssh start
+          ssh -p 443 -o StrictHostKeyChecking=no -R0:localhost:22 tcp@a.pinggy.io > pinggy.log 2>&1 &
+          sleep 10
+          echo "=========================================================="
+          echo "PINGGY CONNECTION INFO:"
+          cat pinggy.log
+          echo "PASSWORD: debug123"
+          echo "=========================================================="
+          # Keep it open for 30 mins if debug is on
+          sleep 1800
       - name: Install Python Dependencies
         run: |
           pip install -r requirements.txt
 
-      - name: Setup tmate session (MANUAL DEBUG)
-        if: ${{ inputs.debug == true }}
-        uses: mxschmitt/action-tmate@v3
+
 
       - name: Run AI Agent
         env:
           MAX_TOOL_OUTPUT: 60000
-          AGENT_PROMPT: ${{ github.event.inputs.prompt || secrets.AGENT_PROMPT || vars.AGENT_PROMPT }}
+          AGENT_PROMPT: ${{ vars.AGENT_PROMPT }}
         run: |
           python -m ai_agent.main \
             --model "gemma4:31b-cloud" \
             --ollama-url "https://ollama.com" \
-            --ollama-key "${{ secrets.OLLAMA_API_KEY || vars.OLLAMA_API_KEY }}" \
-            --whatsapp "${{ secrets.WHATSAPP_NUMBER || vars.WHATSAPP_NUMBER }}" \
+            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
+            --whatsapp "${{ secrets.WHATSAPP_NUMBER }}" \
             --whatsapp-url "http://localhost:3000" \
             --prompt "$AGENT_PROMPT" \
             --quiet
 
-      - name: SSH Debug on Failure
-        if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
+
