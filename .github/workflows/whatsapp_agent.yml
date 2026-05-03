@@ -63,7 +63,7 @@ jobs:
           python-version: '3.10'
           cache: 'pip'
       - name: Setup Pinggy SSH (DEBUG)
-        if: ${{ inputs.debug }}
+        if: ${{ inputs.debug == true }}
         run: |
           sudo apt-get update && sudo apt-get install -y openssh-server
           echo "runner:debug123" | sudo chpasswd
@@ -79,12 +79,12 @@ jobs:
           sleep 3600
 
       - name: Install Python Dependencies
-        if: ${{ !inputs.debug }}
+        if: ${{ inputs.debug == false }}
         run: |
           pip install -r requirements.txt
 
       - name: Run AI Agent
-        if: ${{ !inputs.debug }}
+        if: ${{ inputs.debug == false }}
         env:
           MAX_TOOL_OUTPUT: 60000
           AGENT_PROMPT: ${{ vars.AGENT_PROMPT }}
