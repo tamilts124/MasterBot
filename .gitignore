@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+env/
+bin/
+lib/
+include/
+node_modules/
+.DS_Store
+auth_info/
+WhatsApp_API/
+target_repo/

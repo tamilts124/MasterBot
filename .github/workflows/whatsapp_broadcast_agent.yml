@@ -1,4 +1,4 @@
-name: WhatsApp AI Agent Automation
+name: WhatsApp Broadcast Agent
 
 on:
   schedule:

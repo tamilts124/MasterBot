@@ -233,3 +233,31 @@ def fetch_url(url: str) -> str:
             return _truncate_output(content)
     except Exception as exc:
         return f"[Error] Failed to fetch URL: {exc}"
+
+@tool
+def git_commit_and_push(message: str) -> str:
+    """Commit all current changes and push them to the remote repository. 
+    Ensure you are in the root or a subdirectory of the git repository before calling this."""
+    try:
+        # Verify we are in a git repository
+        is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+        if is_repo.returncode != 0:
+            return f"[Error] Not a git repository (or any of the parent directories): {os.getcwd()}"
+
+        # Check for changes
+        status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
+        if not status.stdout.strip():
+            return "No changes to commit."
+            
+        # Add and commit
+        subprocess.run(["git", "add", "."], check=True)
+        subprocess.run(["git", "commit", "-m", message], check=True)
+        
+        # Push
+        result = subprocess.run(["git", "push"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return f"[Error] Git push failed: {result.stderr}"
+            
+        return f"Successfully committed and pushed: {message}"
+    except Exception as exc:
+        return f"[Error] Git operation failed: {exc}"

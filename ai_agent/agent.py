@@ -10,7 +10,7 @@ from langchain_core.messages import BaseMessage
 from .tools import (
     rename_file, run_bat, run_bash, run_python,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
-    web_search, fetch_url
+    web_search, fetch_url, git_commit_and_push
 )
 
 def build_agent(work_dir: Path, model_name: str, streaming: bool = False, 
@@ -27,7 +27,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     ).get_tools()
     
     # Generic tools
-    tools.extend([rename_file, run_bat, run_bash, run_python, web_search, fetch_url])
+    tools.extend([rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push])
 
     # Conditionally add WhatsApp tools
     if whatsapp_jid:
