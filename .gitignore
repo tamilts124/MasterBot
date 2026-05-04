@@ -13,3 +13,5 @@ node_modules/
 auth_info/
 WhatsApp_API/
 target_repo/
+target_repo_workspace/
+launcher.py

@@ -4,10 +4,8 @@ on:
   schedule:
     # 5:00 AM IST is 11:30 PM UTC (previous day)
     - cron: '30 23 * * *'
-    # 10:00 PM UTC (as specified)
-    - cron: '00 22 * * *'
-  push:
-    branches: [ main, master ]
+    # 5:00 PM IST is 11:30 AM UTC
+    - cron: '30 11 * * *'
   workflow_dispatch:
     inputs:
       prompt:

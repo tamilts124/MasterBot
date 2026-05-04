@@ -253,8 +253,8 @@ def git_commit_and_push(message: str) -> str:
         subprocess.run(["git", "add", "."], check=True)
         subprocess.run(["git", "commit", "-m", message], check=True)
         
-        # Push
-        result = subprocess.run(["git", "push"], capture_output=True, text=True)
+        # Push specifically to origin main
+        result = subprocess.run(["git", "push", "-u", "origin", "main"], capture_output=True, text=True)
         if result.returncode != 0:
             return f"[Error] Git push failed: {result.stderr}"
             
