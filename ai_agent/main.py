@@ -106,11 +106,13 @@ def main(argv: List[str] | None = None) -> None:
                     print()
                 if use_history:
                     message_history.append(AIMessage(content=full_reply))
+                return True
             except Exception as exc:
                 if not quiet:
                     print(f"\n[Error] Streaming failed: {exc}")
                 else:
                     print(exc, file=sys.stderr)
+                return False
         else:
             try:
                 result = agent.invoke({"messages": msgs_to_send})
@@ -121,14 +123,17 @@ def main(argv: List[str] | None = None) -> None:
                     print(reply_text.strip())
                 if use_history:
                     message_history.append(AIMessage(content=reply_text))
+                return True
             except Exception as exc:
                 if not quiet:
                     print(f"[Error] Agent call failed: {exc}\n")
                 else:
                     print(exc, file=sys.stderr)
+                return False
 
     if single_prompt:
-        process_query(single_prompt)
+        if not process_query(single_prompt):
+            sys.exit(1)
         return
 
     try:

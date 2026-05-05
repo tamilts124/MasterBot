@@ -235,9 +235,77 @@ def fetch_url(url: str) -> str:
         return f"[Error] Failed to fetch URL: {exc}"
 
 @tool
+def git_status() -> str:
+    """Check the current status of the git repository, including staged, unstaged, and untracked files."""
+    try:
+        # Verify we are in a git repository
+        is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+        if is_repo.returncode != 0:
+            return f"[Error] Not a git repository: {os.getcwd()}"
+
+        result = subprocess.run(["git", "status"], capture_output=True, text=True)
+        return _truncate_output(result.stdout)
+    except Exception as exc:
+        return f"[Error] Git status operation failed: {exc}"
+
+@tool
+def git_stash_save(message: str = "AI Agent: Auto-stash") -> str:
+    """Stash the current local changes to allow for a clean pull or context switch."""
+    try:
+        # Verify we are in a git repository
+        is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+        if is_repo.returncode != 0:
+            return f"[Error] Not a git repository: {os.getcwd()}"
+
+        result = subprocess.run(["git", "stash", "save", message], capture_output=True, text=True)
+        return f"Successfully stashed changes: {result.stdout}"
+    except Exception as exc:
+        return f"[Error] Git stash save failed: {exc}"
+
+@tool
+def git_stash_pop() -> str:
+    """Pop the most recent stash back into the working directory."""
+    try:
+        # Verify we are in a git repository
+        is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+        if is_repo.returncode != 0:
+            return f"[Error] Not a git repository: {os.getcwd()}"
+
+        result = subprocess.run(["git", "stash", "pop"], capture_output=True, text=True)
+        if result.returncode != 0:
+            return f"[Error] Git stash pop failed (likely due to conflicts):\n{result.stdout}\n{result.stderr}"
+        return f"Successfully popped stash: {result.stdout}"
+    except Exception as exc:
+        return f"[Error] Git stash pop failed: {exc}"
+
+@tool
+def git_pull() -> str:
+    """Pull the latest changes from the remote repository (origin main).
+    Use this if git_commit_and_push fails because the remote repository has changes.
+    If conflicts occur, you must manually resolve them by editing the files."""
+    try:
+        # Verify we are in a git repository
+        is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
+        if is_repo.returncode != 0:
+            return f"[Error] Not a git repository: {os.getcwd()}"
+
+        # Attempt to pull
+        result = subprocess.run(["git", "pull", "origin", "main"], capture_output=True, text=True)
+        if result.returncode != 0:
+            output = result.stdout + result.stderr
+            if "conflict" in output.lower():
+                return f"[Conflict] Merge conflicts detected. Please check `git status` to see affected files and resolve markers (<<<<, ====, >>>>) in the code.\n{output}"
+            return f"[Error] Git pull failed:\n{output}"
+            
+        return f"Successfully pulled latest changes:\n{result.stdout}"
+    except Exception as exc:
+        return f"[Error] Git pull operation failed: {exc}"
+
+@tool
 def git_commit_and_push(message: str) -> str:
     """Commit all current changes and push them to the remote repository. 
-    Ensure you are in the root or a subdirectory of the git repository before calling this."""
+    Ensure you are in the root or a subdirectory of the git repository before calling this.
+    If this fails due to remote changes, you MUST use git_pull first."""
     try:
         # Verify we are in a git repository
         is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
@@ -247,16 +315,20 @@ def git_commit_and_push(message: str) -> str:
         # Check for changes
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
         if not status.stdout.strip():
-            return "No changes to commit."
-            
-        # Add and commit
-        subprocess.run(["git", "add", "."], check=True)
-        subprocess.run(["git", "commit", "-m", message], check=True)
+            # Still try to push in case there are local commits not yet pushed
+            pass
+        else:
+            # Add and commit
+            subprocess.run(["git", "add", "."], check=True)
+            subprocess.run(["git", "commit", "-m", message], check=True)
         
         # Push specifically to origin main
         result = subprocess.run(["git", "push", "-u", "origin", "main"], capture_output=True, text=True)
         if result.returncode != 0:
-            return f"[Error] Git push failed: {result.stderr}"
+            error_msg = result.stderr
+            if "non-fast-forward" in error_msg or "fetch first" in error_msg:
+                return "[Error] Remote repository has changes that are not in your local branch. Your changes have already been committed locally. Please use the `git_pull` tool to sync before trying to push again."
+            return f"[Error] Git push failed: {error_msg}"
             
         return f"Successfully committed and pushed: {message}"
     except Exception as exc:
