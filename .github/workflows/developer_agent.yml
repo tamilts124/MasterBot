@@ -1,11 +1,11 @@
 name: AI Developer Agent
 
 on:
-  schedule:
+  #schedule:
     # 4:00 AM IST (10:30 PM UTC previous day)
-    - cron: '30 22 * * *'
+    #- cron: '30 22 * * *'
     # 4:00 PM IST (10:30 AM UTC)
-    - cron: '30 10 * * *'
+    #- cron: '30 10 * * *'
   workflow_dispatch:
     inputs:
       prompt:
