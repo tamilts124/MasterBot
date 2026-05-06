@@ -25,8 +25,11 @@ class MessageBus:
             "content": content
         }
         filename = f"msg_{int(time.time()*1000)}_{from_id}_{to_id}.json"
-        with open(self.msg_dir / filename, "w") as f:
+        temp_file = self.msg_dir / f"{filename}.tmp"
+        with open(temp_file, "w") as f:
             json.dump(msg, f)
+        # Atomic rename to final destination
+        temp_file.rename(self.msg_dir / filename)
 
     def get_messages(self, agent_id: str) -> List[Dict[str, Any]]:
         messages = []
@@ -46,8 +49,11 @@ class MessageBus:
             "current_task": current_task,
             "last_update": time.time()
         }
-        with open(self.state_dir / f"{agent_id}_status.json", "w") as f:
+        filename = f"{agent_id}_status.json"
+        temp_file = self.state_dir / f"{filename}.tmp"
+        with open(temp_file, "w") as f:
             json.dump(state, f)
+        temp_file.rename(self.state_dir / filename)
 
     def get_agent_status(self, agent_id: str) -> Dict[str, Any]:
         path = self.state_dir / f"{agent_id}_status.json"
