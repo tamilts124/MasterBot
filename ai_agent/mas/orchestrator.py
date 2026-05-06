@@ -237,7 +237,8 @@ class MasterAgent:
                     "1. CHECK ASSIGNMENTS: Compare the list of team members with the 'Active Assignments'. If a slave is NOT in the active manifest, you MUST assign them a modular task using 'send_mas_message'.\n"
                     "2. NO REDUNDANCY: You are FORBIDDEN from re-assigning or messaging slaves who are already in the 'Active Assignments' list with the same task.\n"
                     "3. If a slave is DONE or FAILED, remove them from the manifest and assign a NEW objective.\n"
-                    "4. Do NOT re-analyze the project structure unless a major blocker occurs. Focus on keeping all slaves productive."
+                    "4. COMMIT ENFORCEMENT: Remind slaves to use 'git_commit_and_push' (or commit) after every successful change.\n"
+                    "5. NO OVER-ANALYSIS: Do NOT re-analyze the project structure. Focus on keeping all slaves productive and their code committed."
                 )
                 if self.master_task:
                     prompt += f"\nALSO, continue your personal task: {self.master_task}. Use tools to write code."
