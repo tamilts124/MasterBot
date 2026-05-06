@@ -1,15 +1,15 @@
+import warnings
+# Suppress noisy LangChain/LangGraph deprecation warnings immediately
+warnings.filterwarnings("ignore", message=".*allowed_objects.*will change.*")
+
 import os
 import sys
 import subprocess
 import argparse
 import shutil
 import time
-import warnings
 import socket
 from pathlib import Path
-
-# Suppress noisy LangChain/LangGraph deprecation warnings
-warnings.filterwarnings("ignore", message=".*allowed_objects.*will change.*")
 
 def run_command(cmd, cwd=None, env=None, label=None):
     """Run a shell command with real-time output while capturing for results."""

@@ -48,9 +48,12 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
         ollama_kwargs["base_url"] = ollama_url
     
     if ollama_key:
-        # Pass API key via headers if provided (common for some providers/proxies)
+        # Pass API key and User-Agent via headers
         ollama_kwargs["client_kwargs"] = {
-            "headers": {"Authorization": f"Bearer {ollama_key}"}
+            "headers": {
+                "Authorization": f"Bearer {ollama_key}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            }
         }
 
     llm = ChatOllama(**ollama_kwargs)
