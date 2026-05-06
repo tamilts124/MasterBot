@@ -59,4 +59,5 @@ jobs:
             --prompt "$PROMPT" \
             --repo-url "$TARGET_REPO" \
             --repo-token "$TARGET_REPO_TOKEN" \
-            --workspace mas_workspace
+            --workspace mas_workspace \
+            --no-tor
