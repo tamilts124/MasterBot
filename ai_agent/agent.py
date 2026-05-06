@@ -24,8 +24,8 @@ class TenaciousOllama(ChatOllama):
     def _generate(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, **kwargs):
         agent_id = os.environ.get("AGENT_ID", "Agent")
         active_proxy = os.environ.get("HTTP_PROXY", "DIRECT")
-        
-        max_retries = 3
+        all_keys = [k.strip() for k in os.environ.get("API_KEYS", "").split(",") if k.strip()]
+        max_retries = max(3, len(all_keys))
         retry_delay = 5
         
         for attempt in range(max_retries):
@@ -46,10 +46,10 @@ class TenaciousOllama(ChatOllama):
                 return super()._generate(messages, stop=stop, **kwargs)
             except Exception as e:
                 # ...
-                # Handle status code -1 (internal server error) or other common transient errors
+                # Handle status code -1 (internal server error) or 429 (limit reached) and other transient errors
                 error_str = str(e)
-                if attempt < max_retries - 1 and ("-1" in error_str or "Internal Server Error" in error_str or "503" in error_str or "peer closed" in error_str.lower() or "incomplete chunked read" in error_str.lower()):
-                    print(f"[Brain {agent_id}] ⚠️ Transient Network Error: {e}. Retrying in {retry_delay}s...")
+                if attempt < max_retries - 1 and ("-1" in error_str or "429" in error_str or "limit reached" in error_str.lower() or "Internal Server Error" in error_str or "503" in error_str or "peer closed" in error_str.lower() or "incomplete chunked read" in error_str.lower()):
+                    print(f"[Brain {agent_id}] ⚠️ Usage Limit or Transient Error: {e}. Rotating key and retrying in {retry_delay}s...")
                     time.sleep(retry_delay)
                     retry_delay *= 2 # Exponential backoff
                     continue

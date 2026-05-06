@@ -63,6 +63,15 @@ def main():
     # 2. Prepare Codebase (Safe Workspace Sync)
     if args.repo_url and args.repo_token:
         authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
+        
+        # PERSISTENCE GUARD: Backup squad brain before any destructive git operations
+        import shutil
+        brain_backup_path = root_dir.parent / ".mas_temp_backup"
+        if comm_dir.exists():
+            print("🧠 Squad brain detected. Staging for preservation...")
+            if brain_backup_path.exists(): shutil.rmtree(brain_backup_path)
+            shutil.copytree(comm_dir, brain_backup_path)
+
         if not (root_dir / ".git").exists():
             print(f"📥 Initializing and fetching target repository: {args.repo_url}")
             # Instead of 'git clone .' which fails on non-empty dirs, we init and fetch
@@ -99,6 +108,22 @@ def main():
                     if line.startswith("ref: refs/heads/") and "HEAD" in line:
                         default_branch = line.split("refs/heads/")[1].split()[0]
                         break
+                run_command(["git", "reset", "--hard", f"origin/{default_branch}"], cwd=root_dir, label="Resetting to Remote")
+
+        # RESTORE BRAIN: Merge local progress back into the synced workspace
+        if brain_backup_path.exists():
+            print("🧠 Restoring squad brain to workspace...")
+            # We use a custom merge to avoid deleting new files in .mas that might be on remote
+            for item in os.listdir(brain_backup_path):
+                s = brain_backup_path / item
+                d = comm_dir / item
+                if s.is_dir():
+                    if d.exists(): shutil.rmtree(d)
+                    shutil.copytree(s, d)
+                else:
+                    shutil.copy2(s, d)
+            shutil.rmtree(brain_backup_path)
+
         # 3. Handle Empty Repository (Day Zero)
         files = [f for f in os.listdir(root_dir) if f not in [".git", ".mas"]]
         if not files:

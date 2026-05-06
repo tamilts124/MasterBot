@@ -147,23 +147,34 @@ class MasterAgent:
                         active_slaves.add(sid)
             time.sleep(0.5)
 
-        print(f"[Master {self.config.id}] 🚀 SQUAD READY ({len(active_slaves)}/{len(self.slave_processes)}). COMMENCING MISSION.")
-        sub_tasks = self.split_task(main_task)
-        self.master_task = None
-        for sub in sub_tasks:
-            sid = sub["slave_id"]
-            if sid == self.config.id:
-                self.master_task = sub["task"]
-                print(f"[Master {self.config.id}] 🛠️ Internalizing personal task: {self.master_task}")
-                continue
-            
-            self.task_assignments[sid] = sub["task"]
-            self.bus.send_message(self.config.id, sid, sub["task"], msg_type="task_assignment")
+        print(f"[Master {self.config.id}] 🚀 SQUAD READY ({len(active_slaves)}/{len(self.slave_processes)}).")
         
-        # Save manifest for survivors in the comm directory
-        manifest_path = self.bus.state_dir.parent / "global_task_manifest.json"
-        with open(manifest_path, "w") as f:
-            json.dump(self.task_assignments, f)
+        # RESUMPTION LOGIC: Check if this is a continuation of a previously saved mission
+        manifest_path = self.bus.base_dir / "global_task_manifest.json"
+        if manifest_path.exists():
+            print(f"[Master {self.config.id}] 📂 EXISTING MISSION DETECTED. Resuming from manifest...")
+            with open(manifest_path, "r") as f:
+                self.task_assignments = json.load(f)
+            # Restore personal task
+            self.master_task = self.task_assignments.get(self.config.id)
+            print(f"[Master {self.config.id}] Successfully restored {len(self.task_assignments)} active assignments.")
+        else:
+            print(f"[Master {self.config.id}] 🏛️ COMMENCING NEW MISSION ARCHITECTURE...")
+            sub_tasks = self.split_task(main_task)
+            self.master_task = None
+            for sub in sub_tasks:
+                sid = sub["slave_id"]
+                if sid == self.config.id:
+                    self.master_task = sub["task"]
+                    print(f"[Master {self.config.id}] 🛠️ Internalizing personal task: {self.master_task}")
+                    continue
+                
+                self.task_assignments[sid] = sub["task"]
+                self.bus.send_message(self.config.id, sid, sub["task"], msg_type="task_assignment")
+            
+            # Save manifest for future resumption
+            with open(manifest_path, "w") as f:
+                json.dump(self.task_assignments, f)
         
         while True:
             # Check for wipe-out (with 10-minute safety buffer for false alarms)
