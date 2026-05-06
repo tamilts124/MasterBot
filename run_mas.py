@@ -64,12 +64,24 @@ def main():
     if args.repo_url and args.repo_token:
         authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
         if not (root_dir / ".git").exists():
-            print(f"📥 Cloning target repository: {args.repo_url}")
-            root_dir.mkdir(parents=True, exist_ok=True)
-            clone_res = run_command(["git", "clone", authenticated_url, "."], cwd=root_dir, label="Cloning Repo")
-            if clone_res.returncode != 0:
-                print("❌ Failed to clone target repository.")
-                sys.exit(1)
+            print(f"📥 Initializing and fetching target repository: {args.repo_url}")
+            # Instead of 'git clone .' which fails on non-empty dirs, we init and fetch
+            run_command(["git", "init"], cwd=root_dir, label="Init Git")
+            run_command(["git", "remote", "add", "origin", authenticated_url], cwd=root_dir, label="Adding Remote")
+            
+            fetch_res = run_command(["git", "fetch", "origin"], cwd=root_dir, label="Fetching Data")
+            if fetch_res.returncode == 0:
+                # Try to reset to the default branch (usually main or master)
+                ls_remote = run_command(["git", "ls-remote", "--symref", "origin", "HEAD"], cwd=root_dir)
+                default_branch = "main"
+                for line in ls_remote.stdout.splitlines():
+                    if line.startswith("ref: refs/heads/") and "HEAD" in line:
+                        default_branch = line.split("refs/heads/")[1].split()[0]
+                        break
+                print(f"📦 Populating workspace from branch: {default_branch}")
+                run_command(["git", "reset", "--hard", f"origin/{default_branch}"], cwd=root_dir, label="Resetting to Remote")
+            else:
+                print("⚠️ Remote repository appears to be empty or inaccessible. Proceeding with local init.")
         else:
             print("🔄 Safe Workspace Sync & Populate...")
             run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir, label="Updating Remote URL")
