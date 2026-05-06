@@ -16,7 +16,8 @@ from .tools import (
     rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
     report_to_master, ask_coworker, get_mas_identity, list_team_members, 
-    check_agent_status, send_mas_message, inspect_agent_communication
+    check_agent_status, send_mas_message, inspect_agent_communication,
+    contribute_to_knowledge, query_knowledge
 )
 
 class TenaciousOllama(ChatOllama):

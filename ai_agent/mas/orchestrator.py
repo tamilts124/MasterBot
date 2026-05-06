@@ -19,8 +19,6 @@ class MasterAgent:
         self.slave_processes: Dict[str, subprocess.Popen] = {}
         self.task_assignments: Dict[str, str] = {} # slave_id -> task_description
         self.reassignment_counts: Dict[str, int] = {} # task_description -> count
-        
-        self.reassignment_counts: Dict[str, int] = {} # task_description -> count
 
     def launch_slaves(self):
         for i, slave_config in enumerate(self.config.slaves):
@@ -114,8 +112,7 @@ class MasterAgent:
         
         try:
             print(f"[Master {self.config.id}] 🧠 CONSULTING BRAIN FOR STRATEGY...")
-            from langchain_core.messages import HumanMessage
-            result = master_llm.invoke([HumanMessage(content=prompt)])
+            result = self.master_agent.invoke({"input": prompt})
             reply = extract_reply(result)
             # Try to parse JSON from the reply
             import re
