@@ -3,6 +3,8 @@ import sys
 import subprocess
 import tempfile
 import json
+import time
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 from langchain_core.tools import tool
 import urllib.request
@@ -404,7 +406,19 @@ def send_mas_message(to_id: str, message: str) -> str:
     
     if not agent_id: return "[Error] MAS context missing."
     
-    if not agent_id: return "[Error] MAS context missing."
+    # Permission Logic
+    comm_same = os.environ.get("MAS_COMM_SAME_LEVEL", "true").lower() == "true"
+    comm_anyone = os.environ.get("MAS_COMM_ANYONE", "false").lower() == "true"
+    coworkers = os.environ.get("COWORKERS", "").split(",")
+    
+    is_master = to_id == parent_id
+    is_coworker = to_id in coworkers
+    
+    if not (is_master or is_coworker or comm_anyone):
+        return f"[Permission Denied] You cannot communicate with {to_id} unless 'communicate_anyone' is enabled."
+    
+    if is_coworker and not comm_same:
+        return f"[Permission Denied] Same-level communication is disabled for you."
     
     print(f"\n[COMM] {agent_id} -> {to_id}: {message[:100]}...\n", flush=True)
     get_bus().send_message(agent_id, to_id, message, msg_type="text")
