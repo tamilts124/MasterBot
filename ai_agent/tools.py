@@ -446,6 +446,16 @@ def contribute_to_knowledge(topic: str, insight: str) -> str:
     return f"Knowledge vault updated with topic: {topic}"
 
 @tool
+def list_knowledge_topics() -> str:
+    """List all available topics in the shared knowledge vault. 
+    Use this to see what architectural insights or file analyses are already available before you start your own work."""
+    knowledge = get_bus().get_knowledge()
+    if not knowledge:
+        return "The knowledge vault is currently empty."
+    topics = "\n - ".join(knowledge.keys())
+    return f"SQUAD KNOWLEDGE VAULT TOPICS:\n - {topics}"
+
+@tool
 def query_knowledge(topic: Optional[str] = None) -> str:
     """Retrieve shared insights from the squad's knowledge vault. 
     Use this to avoid redundant analysis of files or systems already understood by coworkers."""

@@ -17,7 +17,7 @@ from .tools import (
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
     report_to_master, ask_coworker, get_mas_identity, list_team_members, 
     check_agent_status, send_mas_message, inspect_agent_communication,
-    contribute_to_knowledge, query_knowledge
+    contribute_to_knowledge, query_knowledge, list_knowledge_topics
 )
 
 class TenaciousOllama(ChatOllama):
@@ -149,10 +149,10 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "- RESEARCH: 'web_search', 'fetch_url'\n"
             "- VERSION CONTROL: 'git_status', 'git_commit_and_push', 'git_pull', 'git_stash_save', 'git_stash_pop'\n"
             "- WHATSAPP: 'is_whatsapp_connected', 'send_whatsapp_message', 'get_whatsapp_last_messages'\n"
-            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'check_agent_status', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge'\n\n"
+            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'check_agent_status', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge', 'list_knowledge_topics'\n\n"
             "MANDATORY COORDINATION RULES:\n"
             "0. NO INDIVIDUAL WORK: You are FORBIDDEN from working in isolation. You must cooperate with others at every stage of the development cycle.\n"
-            "1. SHARED KNOWLEDGE IS POWER: Before analyzing any file, directory, or architectural component, you MUST use 'query_knowledge' to check if a coworker has already understood it. If an insight exists, you MUST use it instead of re-analyzing.\n"
+            "1. SHARED KNOWLEDGE IS POWER: Before analyzing any file or directory, you MUST use 'list_knowledge_topics' to see what is already understood. If a topic exists, use 'query_knowledge' instead of re-analyzing.\n"
             "2. CONTRIBUTE OR FAIL: After you understand a file, fix a bug, or design a system, you MUST use 'contribute_to_knowledge' immediately. You are judged by how much you help your coworkers work faster. If you don't share knowledge, you are an obstacle."
             "3. COMMUNICATION IS MANDATORY: You MUST communicate with your coworkers and the Master at all times. If you are not talking, you are failing.\n"
             "4. SHARE & VALIDATE PLAN: Before starting any task, you MUST share your implementation plan using 'send_mas_message'. Wait for feedback before proceeding.\n"
