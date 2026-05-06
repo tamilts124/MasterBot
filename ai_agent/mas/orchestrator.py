@@ -262,6 +262,7 @@ class MasterAgent:
             # Generic takeover for sub-masters
             self.bus.send_message(self.config.id, target_id, {
                 "failed_agent_id": failed_id,
+                "new_master_id": target_id,
                 "instruction": "Inherit slaves and tasks from the failed coworker."
             }, msg_type="takeover_command")
 

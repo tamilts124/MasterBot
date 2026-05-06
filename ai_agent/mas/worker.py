@@ -159,8 +159,8 @@ def main():
                     sys.exit(137)
 
             elif msg["type"] == "takeover_command":
-                failed_id = msg["content"]["failed_agent_id"]
-                new_master_id = msg["content"]["new_master_id"]
+                failed_id = msg["content"].get("failed_agent_id")
+                new_master_id = msg["content"].get("new_master_id", args.id)
                 
                 if new_master_id == args.id:
                     print(f"[Worker {args.id}] 👑 PROMOTION RECEIVED. I am now the NEW ROOT MASTER.")
