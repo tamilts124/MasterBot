@@ -28,20 +28,6 @@ class TenaciousOllama(ChatOllama):
         max_retries = max(3, len(all_keys))
         retry_delay = 5
         
-        # 1. Internal Loop Detection (Repetition Guard)
-        # Check if the last 3 tool calls were identical
-        last_tool_calls = []
-        for m in reversed(messages):
-            if hasattr(m, "tool_calls") and m.tool_calls:
-                for tc in m.tool_calls:
-                    last_tool_calls.append(f"{tc['name']}:{json.dumps(tc['args'], sort_keys=True)}")
-            if len(last_tool_calls) >= 3: break
-        
-        if len(last_tool_calls) >= 3 and all(x == last_tool_calls[0] for x in last_tool_calls):
-            loop_msg = "\n\n[SYSTEM ERROR] LOOP DETECTED: You have performed the exact same action 3 times. You are FORBIDDEN from repeating it. You must either change your strategy, ask for help, or STOP and report current progress now."
-            messages.append(HumanMessage(content=loop_msg))
-            print(f"[Brain {agent_id}] ⚠️ INTERNAL LOOP BREAKER ACTIVATED. Forcing brain reset.")
-
         for attempt in range(max_retries):
             try:
                 print(f"[Brain {agent_id}] Starting generation (Proxy: {active_proxy}, Attempt: {attempt + 1})")
@@ -175,9 +161,10 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "7. ASK WHEN IN DOUBT: If you have any doubt, ask the Master or a coworker immediately.\n"
             "8. MONITOR: Use 'check_agent_status' and 'inspect_agent_communication' to align your work.\n"
             "9. REPORT: You MUST report to the Master ('report_to_master') after every significant milestone.\n"
-            "10. NO LOOPS: If you repeat an action twice without success, or if you repeat a SUCCESSFUL report twice, STOP and wait for new instructions. Do NOT spam the Master with duplicate reports.\n"
-            "11. INBOX PRIORITY: If you see an [INBOX ALERT] in your instructions, you are FORBIDDEN from performing any other task until you have used 'inspect_agent_communication' to read the pending messages. Coordination is your highest priority.\n"
-            "12. COMMIT & SECURE: After every successful file edit or bug fix, you MUST use 'git_commit_and_push' (or at least commit) before moving to the next step. Never leave your changes uncommitted."
+            "10. REPETITION IS DEATH: If you repeat any action, tool-call, or report twice, you will be considered COMPROMISED and your process will be TERMINATED. Efficiency is your only survival metric.\n"
+            "11. ONE-SHOT COMMUNICATION: When using 'send_mas_message' or 'report_to_master', you MUST only do it ONCE per objective. Do not wait for a response; send the message and immediately proceed to your next technical file operation.\n"
+            "12. NO SPAM: Do not repeat successful reports. Once a report is sent, it is archived. Repeating it is a waste of resources and will lead to your deletion.\n"
+            "13. INBOX PRIORITY: If you see an [INBOX ALERT], read it once and ACT. Do not keep checking the inbox if no new messages have arrived."
         )
     )
     
@@ -222,10 +209,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
 
             actual_input = input_data["input"] if isinstance(input_data, dict) else input_data
 
-            # Enforce strict recursion limit to break infinite loops (MAX 15 steps per turn)
-            if config is None: config = {"configurable": {"thread_id": agent_id}}
-            if "recursion_limit" not in config: config["recursion_limit"] = 15
-            
+            # Invoke the agent graph
             result = agent.invoke({"messages": [HumanMessage(content=actual_input)]}, config)
             
             # Return the last message content to maintain compatibility
