@@ -61,6 +61,42 @@ def main():
         for c in coworkers:
             bus.send_message(args.id, c, f"Coworker {args.id} is down. Error: {error_msg}", msg_type="coworker_down")
 
+    def become_master(bus, coworkers):
+        """Transformation logic for a Slave to become a Master."""
+        print(f"[Worker {args.id}] 👑 TRANSFORMING INTO ROOT MASTER...")
+        from .orchestrator import MasterAgent
+        from .config_loader import load_config
+        
+        # Broadcast leadership
+        for c in coworkers:
+            bus.send_message(args.id, c, {"new_master": args.id}, msg_type="new_master_announcement")
+        bus.update_status(args.id, "acting_master")
+
+        # Load hierarchy and start Master Cycle
+        # Path is .. because worker is running in mas_workspace
+        config_path = Path("..") / "mas_config.json"
+        if not config_path.exists():
+            # Fallback for different run configurations
+            config_path = Path("mas_config.json")
+            
+        full_config = load_config(str(config_path))
+        def find_self(cfg, target_id):
+            if cfg.id == target_id: return cfg
+            for s in cfg.slaves:
+                res = find_self(s, target_id)
+                if res: return res
+            return None
+        
+        my_config = find_self(full_config, args.id)
+        if my_config:
+            new_master = MasterAgent(my_config, bus, None, Path(".."))
+            new_master.discover_slaves()
+            try:
+                new_master.run_cycle("Resume mission: Leadership Succession complete.")
+            except Exception as e:
+                print(f"[Master {args.id}] Critical transformation failure: {e}")
+        sys.exit(0)
+
     last_heartbeat = 0
     while True:
         # 1. Master Watchdog (With Stale Detection)
@@ -103,9 +139,7 @@ def main():
                     sys.exit(0)
                 else:
                     print(f"[Worker {args.id}] MASTER {args.parent} DIED. I am the Alpha Slave. Promoting to Master...")
-                    for c in coworkers:
-                        bus.send_message(args.id, c, {"new_master": args.id}, msg_type="new_master_announcement")
-                    bus.update_status(args.id, "acting_master")
+                    become_master(bus, coworkers)
             else:
                 print(f"[Worker {args.id}] Master died. Waiting for {alpha_id} to promote.")
 
@@ -194,50 +228,8 @@ def main():
                 new_master_id = msg["content"].get("new_master_id", args.id)
                 
                 if new_master_id == args.id:
-                    print(f"[Worker {args.id}] 👑 PROMOTION RECEIVED. I am now the NEW ROOT MASTER.")
-                    os.environ["AGENT_ID"] = args.id
-                    from .orchestrator import MasterAgent
-                    from .config_loader import load_config
-                    
-                    # Reload config to get full hierarchy
-                    full_config = load_config("../mas_config.json") # Adjust path as needed
-                    # Find self in the config
-                    def find_self(cfg, target_id):
-                        if cfg.id == target_id: return cfg
-                        for s in cfg.slaves:
-                            res = find_self(s, target_id)
-                            if res: return res
-                        return None
-                    
-                    my_config = find_self(full_config, args.id)
-                    if my_config:
-                        # Broadcast leadership to others
-                        for other_slave in full_config.slaves:
-                            if other_slave.id != args.id:
-                                bus.send_message(args.id, other_slave.id, {"new_master": args.id}, msg_type="new_master_announcement")
-                        
-                        # Transform into Master
-                        new_master = MasterAgent(my_config, bus, None, Path(".."))
-                        new_master.discover_slaves()
-                        try:
-                            new_master.run_cycle("Continue mission from where it left off.")
-                        except Exception as e:
-                            print(f"[Master {args.id}] FATAL BRAIN ERROR: {e}")
-                            # Promote the next slave in the original config
-                            my_index = -1
-                            for i, s in enumerate(full_config.slaves):
-                                if s.id == args.id:
-                                    my_index = i
-                                    break
-                            
-                            if my_index != -1 and my_index + 1 < len(full_config.slaves):
-                                next_leader = full_config.slaves[my_index + 1].id
-                                print(f"[Critical] {args.id} is abdicating. PROMOTING {next_leader} TO ROOT MASTER...")
-                                bus.send_message(args.id, next_leader, {"failed_agent_id": args.id, "new_master_id": next_leader}, msg_type="takeover_command")
-                            else:
-                                print("[Critical] No more slaves available for promotion. Mission failed.")
-                        
-                        sys.exit(0)
+                    print(f"[Worker {args.id}] 👑 PROMOTION RECEIVED via direct command.")
+                    become_master(bus, coworkers)
                 else:
                     print(f"[Worker {args.id}] Inheriting tasks from failed coworker {failed_id}")
                     log_history("takeover", failed_id)
