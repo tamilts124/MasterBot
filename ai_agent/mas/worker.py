@@ -110,9 +110,13 @@ def main():
         sys.exit(0)
 
     last_heartbeat = 0
+    last_cycle_time = 0
     last_log_state = None
     while True:
-        # NO SLEEP - Strict Compliance with Rule #1
+        # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
+        if time.time() - last_cycle_time < 2:
+            continue
+        last_cycle_time = time.time()
         
         # 1. Master Watchdog (With Stale Detection)
         master_status = bus.get_agent_status(args.parent)

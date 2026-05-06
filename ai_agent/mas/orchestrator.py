@@ -180,8 +180,12 @@ class MasterAgent:
             with open(manifest_path, "w") as f:
                 json.dump(self.task_assignments, f)
         
+        last_cycle_time = 0
         while True:
-            # NO SLEEP - Strict Compliance with Rule #1
+            # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
+            if time.time() - last_cycle_time < 2:
+                continue
+            last_cycle_time = time.time()
             
             # Check for timeout (with 10-minute safety buffer for false alarms)
             elapsed = time.time() - self.start_time
