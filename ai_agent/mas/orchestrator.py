@@ -114,12 +114,12 @@ class MasterAgent:
     def _ensure_brain(self):
         """Ensure the Master's AI brain is initialized."""
         if not hasattr(self, 'master_agent') or self.master_agent is None:
+            os.environ["AGENT_ID"] = self.config.id
             self.master_agent = build_agent(
                 work_dir=self.workspace,
-                agent_id=self.config.id,
-                model=self.config.model,
-                api_url=self.config.api_url,
-                api_key=self.config.api_key,
+                model_name=self.config.model,
+                ollama_url=self.config.api_url,
+                ollama_key=self.config.api_key,
                 parent_id="USER"
             )
 
