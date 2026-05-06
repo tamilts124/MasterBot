@@ -132,6 +132,9 @@ class MasterAgent:
         
         self.bus.update_status(self.config.id, "active", main_task)
         
+        print(f"[Master {self.config.id}] 🛡️ SQUAD VERIFICATION: Waiting for Slaves to report in...")
+        active_slaves = set()
+        v_start = time.time()
         # Wait up to 60 seconds for roll-call to allow for Tor proxy latency
         while len(active_slaves) < len(self.slave_processes) and (time.time() - v_start) < 60:
             # We check ALL pending messages
