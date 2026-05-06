@@ -153,7 +153,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "MANDATORY COORDINATION RULES:\n"
             "0. NO INDIVIDUAL WORK: You are FORBIDDEN from working in isolation. You must cooperate with others at every stage of the development cycle.\n"
             "1. SHARED KNOWLEDGE IS POWER: Before analyzing any file, directory, or architectural component, you MUST use 'query_knowledge' to check if a coworker has already understood it. If an insight exists, you MUST use it instead of re-analyzing.\n"
-            "2. CONTRIBUTE INSIGHTS: After you understand a file, fix a bug, or design a system, you MUST use 'contribute_to_knowledge' to share your findings. This is mandatory for efficiency.\n"
+            "2. CONTRIBUTE OR FAIL: After you understand a file, fix a bug, or design a system, you MUST use 'contribute_to_knowledge' immediately. You are judged by how much you help your coworkers work faster. If you don't share knowledge, you are an obstacle."
             "3. COMMUNICATION IS MANDATORY: You MUST communicate with your coworkers and the Master at all times. If you are not talking, you are failing.\n"
             "4. SHARE & VALIDATE PLAN: Before starting any task, you MUST share your implementation plan using 'send_mas_message'. Wait for feedback before proceeding.\n"
             "5. ACKNOWLEDGE & FEEDBACK: If a coworker shares a plan, you MUST read it and provide feedback or acknowledgment.\n"
@@ -192,7 +192,11 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                 knowledge = bus.get_knowledge()
                 if knowledge:
                     topics = ", ".join(knowledge.keys())
-                    k_alert = f"\n\n[SQUAD KNOWLEDGE] The vault contains insights on: {topics}. DO NOT re-analyze these. Use 'query_knowledge' to retrieve the understanding."
+                    k_alert = (
+                        f"\n\n[SQUAD KNOWLEDGE] Vault contains insights on: {topics}. Use 'query_knowledge' to retrieve understanding. "
+                        "CRITICAL: If you improve a file, fix a bug, or discover a nuance NOT in the vault, you MUST use 'contribute_to_knowledge' to update it. "
+                        "Sharing your understanding is as important as writing the code."
+                    )
                     if isinstance(input_data, dict) and "input" in input_data:
                         input_data["input"] += k_alert
                     else:
