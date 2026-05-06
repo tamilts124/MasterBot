@@ -218,6 +218,7 @@ def main():
                         
                         # Transform into Master
                         new_master = MasterAgent(my_config, bus, None, Path(".."))
+                        new_master.discover_slaves()
                         try:
                             new_master.run_cycle("Continue mission from where it left off.")
                         except Exception as e:

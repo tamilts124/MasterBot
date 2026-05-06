@@ -20,6 +20,16 @@ class MasterAgent:
         self.task_assignments: Dict[str, str] = {} # slave_id -> task_description
         self.reassignment_counts: Dict[str, int] = {} # task_description -> count
 
+    def discover_slaves(self):
+        """Used by promoted Masters to find existing slave processes without re-launching them."""
+        print(f"[Master {self.config.id}] 🔍 RECONNECTING WITH SQUAD...")
+        for slave_config in self.config.slaves:
+            status = self.bus.get_agent_status(slave_config.id)
+            if status.get("status") not in ["died", "offline"]:
+                print(f"[Master {self.config.id}] Re-linked with active slave: {slave_config.id}")
+                # Mark as known. The cycle will monitor via status if proc is None
+                self.slave_processes[slave_config.id] = None
+
     def launch_slaves(self):
         for i, slave_config in enumerate(self.config.slaves):
             # Slaves are level + 1 relative to Master
@@ -179,6 +189,16 @@ class MasterAgent:
             # Check for failed processes
             failed_slaves = []
             for slave_id, proc in list(self.slave_processes.items()):
+                if proc is None:
+                    # Promoted Master path: Monitor via status timestamp
+                    status = self.bus.get_agent_status(slave_id)
+                    last_update = status.get("last_update", 0)
+                    if last_update > 0 and (time.time() - last_update > 600):
+                        print(f"[Master {self.config.id}] Inherited slave {slave_id} has gone SILENT (10m). Task needs reassignment.")
+                        failed_slaves.append(slave_id)
+                        del self.slave_processes[slave_id]
+                    continue
+
                 ret = proc.poll()
                 if ret is not None:
                     print(f"[Master {self.config.id}] Slave {slave_id} exited with code {ret}. Task needs reassignment.")
