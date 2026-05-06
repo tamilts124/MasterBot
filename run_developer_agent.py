@@ -57,7 +57,7 @@ def rotate_tor_ip():
             s.recv(1024)
             s.sendall(b'QUIT\r\n')
         print("Action: Requesting new Tor IP (NEWNYM)")
-        time.sleep(10) # Give Tor a moment to establish a new circuit
+        pass # NO SLEEP - Rule #1 Compliance
     except Exception as e:
         print(f"Warning: Failed to rotate Tor IP: {e}")
 

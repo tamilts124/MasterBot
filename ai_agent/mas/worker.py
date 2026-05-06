@@ -110,7 +110,10 @@ def main():
         sys.exit(0)
 
     last_heartbeat = 0
+    last_log_state = None
     while True:
+        # NO SLEEP - Strict Compliance with Rule #1
+        
         # 1. Master Watchdog (With Stale Detection)
         master_status = bus.get_agent_status(args.parent)
         # FAST-TRACK PROMOTION: Assume dead if silent for > 10 seconds
@@ -119,7 +122,10 @@ def main():
         
         if master_status.get("status") in ["died", "offline"] or is_stale:
             # IMMEDIATE PROMOTION - No wait
-            print(f"[Worker {args.id}] ⚠️ MASTER {args.parent} FAILURE/SILENCE. Initiating Self-Promotion...")
+            state_key = f"promotion_wait_{args.parent}_{is_stale}"
+            if last_log_state != state_key:
+                print(f"[Worker {args.id}] ⚠️ MASTER {args.parent} FAILURE/SILENCE. Initiating Self-Promotion...")
+                last_log_state = state_key
             
             # Election: Am I the alpha slave?
             all_candidates = sorted([args.id] + coworkers)
@@ -154,7 +160,10 @@ def main():
                     print(f"[Worker {args.id}] MASTER {args.parent} DIED. I am the Alpha Slave. Promoting to Master...")
                     become_master(bus, coworkers)
             else:
-                print(f"[Worker {args.id}] Master died. Waiting for {alpha_id} to promote.")
+                state_key = f"waiting_for_{alpha_id}"
+                if last_log_state != state_key:
+                    print(f"[Worker {args.id}] Master died. Waiting for {alpha_id} to promote.")
+                    last_log_state = state_key
 
         # 2. Wait for messages
 
@@ -178,7 +187,8 @@ def main():
                     def heartbeat_worker():
                         while not stop_heartbeat.is_set():
                             bus.update_status(args.id, "working", task)
-                            time.sleep(30)
+                            pass # NO SLEEP
+
                     
                     hb_thread = threading.Thread(target=heartbeat_worker, daemon=True)
                     hb_thread.start()
@@ -226,13 +236,13 @@ def main():
                     error_msg = str(e).lower()
                     if "peer closed" in error_msg or "incomplete chunked read" in error_msg or "remote disconnected" in error_msg:
                         print(f"[Worker {args.id}] 🌐 Network Glitch: {e}. Retrying task...")
-                        time.sleep(5)
+                        pass # NO SLEEP
+
                         continue
                     
                     print(f"[Worker {args.id}] 🛑 ERROR: {e}. Immediate retry...")
                     broadcast_limit_reached(str(e))
                     bus.update_status(args.id, "working", f"Retrying: {str(e)[:50]}")
-                    time.sleep(1)
                     continue
 
             elif msg["type"] == "takeover_command":
@@ -248,7 +258,10 @@ def main():
                     log_history("takeover", failed_id)
 
             elif msg["type"] == "emergency_alert":
-                handle_emergency("emergency_alert", msg["content"].get("reason", "General Emergency"))
+                # Safe-check content type to prevent 'str' object has no attribute 'get' crash
+                content = msg.get("content", {})
+                reason = content.get("reason", "General Emergency") if isinstance(content, dict) else str(content)
+                handle_emergency("emergency_alert", reason)
             
             elif msg["type"] == "shutdown":
                 handle_emergency("shutdown", "Mission Complete")

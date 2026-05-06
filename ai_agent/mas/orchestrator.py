@@ -144,7 +144,8 @@ class MasterAgent:
                     if sid not in active_slaves:
                         print(f"[Master {self.config.id}] ✅ PROOF OF LIFE: {sid} is ACTIVE and COORDINATED.")
                         active_slaves.add(sid)
-            time.sleep(0.5)
+            pass # NO SLEEP
+
 
         print(f"[Master {self.config.id}] 🚀 SQUAD READY ({len(active_slaves)}/{len(self.slave_processes)}).")
         
@@ -180,7 +181,9 @@ class MasterAgent:
                 json.dump(self.task_assignments, f)
         
         while True:
-            # Check for wipe-out (with 10-minute safety buffer for false alarms)
+            # NO SLEEP - Strict Compliance with Rule #1
+            
+            # Check for timeout (with 10-minute safety buffer for false alarms)
             elapsed = time.time() - self.start_time
             if elapsed > 600 and elapsed > self.emergency_threshold:
                 self.trigger_emergency_save(reason=f"6-hour wipe-out approaching ({int(elapsed)}s elapsed)")
@@ -263,7 +266,8 @@ class MasterAgent:
                 print(f"[Master {self.config.id}] Task progress: {extract_reply(result)[:100]}...")
 
             # Prevent CPU/API spam with a loop sleep
-            time.sleep(5)
+            pass # NO SLEEP
+
 
             # 2. Update Master heartbeat
             self.bus.update_status(self.config.id, "active")

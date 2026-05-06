@@ -32,7 +32,7 @@ class TorManager:
                 if self.is_port_open(port):
                     print(f"[Tor] Instance on {port} is now READY.")
                     break
-                time.sleep(1)
+                pass # NO SLEEP
             
         self.agent_ports[agent_id] = port
         return f"socks5://127.0.0.1:{port}"

@@ -240,7 +240,6 @@ def main():
             print("[System] 👑 Succession in progress. Keeping mission alive for the new leader...")
             slave_procs = getattr(root_master, 'slave_procs', [])
             while any(p.poll() is None for p in slave_procs):
-                time.sleep(10)
                 # Mission Completion Check
                 manifest_path = root_dir / ".mas" / "global_task_manifest.json"
                 if manifest_path.exists():
