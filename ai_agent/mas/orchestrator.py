@@ -120,7 +120,7 @@ class MasterAgent:
                 model_name=self.config.model,
                 ollama_url=self.config.api_url,
                 ollama_key=self.config.api_key,
-                parent_id="USER"
+                use_mas_tools=True
             )
 
     def run_cycle(self, main_task: str):
