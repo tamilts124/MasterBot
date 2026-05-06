@@ -113,25 +113,13 @@ def main():
     while True:
         # 1. Master Watchdog (With Stale Detection)
         master_status = bus.get_agent_status(args.parent)
-        last_seen = master_status.get("timestamp", 0)
-        # If Master is silent for > 5 minutes, we assume it crashed and start election
-        is_stale = (last_seen > 0 and time.time() - last_seen > 300)
+        # FAST-TRACK PROMOTION: Assume dead if silent for > 10 seconds
+        last_seen = master_status.get("last_update", 0)
+        is_stale = (last_seen > 0 and time.time() - last_seen > 10)
         
         if master_status.get("status") in ["died", "offline"] or is_stale:
-            # [SUCCESSION HIERARCHY]
-            # 1. Wait 2 minutes to see if an 'Uncle' (Coworker Master) takes over.
-            if not hasattr(main, "succession_timer"):
-                main.succession_timer = time.time()
-                print(f"[Worker {args.id}] ⚠️ MASTER {args.parent} FAILURE. Waiting 2m for Coworker Master takeover...")
-            
-            elapsed_wait = time.time() - main.succession_timer
-            if elapsed_wait < 120:
-                # We stay in the loop to receive potential 'takeover_command' or 'new_master_announcement'
-                time.sleep(5)
-                continue
-
-            # 2. No takeover? Proceed to Self-Promotion Election.
-            print(f"[Worker {args.id}] ⏳ 2m Timeout reached. No Peer Master claimed us. Initiating Self-Promotion...")
+            # IMMEDIATE PROMOTION - No wait
+            print(f"[Worker {args.id}] ⚠️ MASTER {args.parent} FAILURE/SILENCE. Initiating Self-Promotion...")
             
             # Election: Am I the alpha slave?
             all_candidates = sorted([args.id] + coworkers)
@@ -241,15 +229,10 @@ def main():
                         time.sleep(5)
                         continue
                     
-                    print(f"[Worker {args.id}] 🛑 CRITICAL LIMIT OR ERROR: {e}. Entering Deep Sleep (10m) to wait for reset...")
+                    print(f"[Worker {args.id}] 🛑 ERROR: {e}. Immediate retry...")
                     broadcast_limit_reached(str(e))
-                    bus.update_status(args.id, "sleeping", f"Limit Reached: {str(e)[:50]}")
-                    # Non-blocking sleep: check for emergency messages while waiting
-                    for _ in range(60):
-                        time.sleep(10)
-                        for emsg in bus.get_messages(args.id):
-                            if emsg["type"] in ["emergency_alert", "shutdown"]:
-                                handle_emergency(emsg["type"], "Sleep interrupted by User/Master")
+                    bus.update_status(args.id, "working", f"Retrying: {str(e)[:50]}")
+                    time.sleep(1)
                     continue
 
             elif msg["type"] == "takeover_command":

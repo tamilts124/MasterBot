@@ -193,8 +193,8 @@ class MasterAgent:
                     # Promoted Master path: Monitor via status timestamp
                     status = self.bus.get_agent_status(slave_id)
                     last_update = status.get("last_update", 0)
-                    if last_update > 0 and (time.time() - last_update > 600):
-                        print(f"[Master {self.config.id}] Inherited slave {slave_id} has gone SILENT (10m). Task needs reassignment.")
+                    if last_update > 0 and (time.time() - last_update > 30):
+                        print(f"[Master {self.config.id}] Inherited slave {slave_id} has gone SILENT (30s). Reassigning.")
                         failed_slaves.append(slave_id)
                         del self.slave_processes[slave_id]
                     continue
