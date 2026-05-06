@@ -212,13 +212,21 @@ class MasterAgent:
                         task_to_resume = self.task_assignments.pop(msg["from"], None)
                         self.handle_slave_failure(msg["from"], task_to_resume)
                 
-                # Use the brain for analysis and coding
-                prompt = f"Analyze these new reports and update the mission status: {new_reports}"
+                # Use the brain for analysis and coding with the Global Manifest as context
+                manifest = self.task_assignments
+                prompt = (
+                    f"MISSION CONTEXT:\n- Current Active Assignments: {json.dumps(manifest, indent=2)}\n"
+                    f"- New Incoming Reports: {json.dumps(new_reports, indent=2)}\n\n"
+                    "INSTRUCTIONS:\n"
+                    "1. Analyze the reports and update the status of those specific slaves.\n"
+                    "2. Do NOT re-issue or re-architect tasks that are already in the 'Active Assignments' list.\n"
+                    "3. If a task is complete, acknowledge it. If a slave is stuck, give them a NEW, non-redundant objective.\n"
+                )
                 if self.master_task:
-                    prompt += f"\nALSO, continue working on your assigned task: {self.master_task}. Use your tools to write code and update progress."
+                    prompt += f"\nALSO, continue your personal task: {self.master_task}. Use tools to write code."
                 
                 result = self.master_agent.invoke({"input": prompt})
-                print(f"[Master {self.config.id}] Brain update: {extract_reply(result)[:100]}...")
+                print(f"[Master {self.config.id}] Status Update complete.")
             
             # Periodically work on personal task even if no reports (every 10 minutes to avoid spam)
             elif self.master_task and (time.time() - getattr(self, 'last_personal_work', 0) > 600):
