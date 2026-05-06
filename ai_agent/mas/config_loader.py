@@ -3,7 +3,7 @@ import os
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
-DEFAULT_MODEL = "gemma4:31b-cloud"
+DEFAULT_MODEL = "qwen3-coder:480b-cloud"
 DEFAULT_API_URL = "https://ollama.com"
 
 class AgentConfig:
