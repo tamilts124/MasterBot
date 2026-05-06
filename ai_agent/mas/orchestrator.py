@@ -132,11 +132,8 @@ class MasterAgent:
         
         self.bus.update_status(self.config.id, "active", main_task)
         
-        print(f"[Master {self.config.id}] 🛡️ SQUAD VERIFICATION: Waiting for Slaves to report in...")
-        active_slaves = set()
-        v_start = time.time()
-        # Wait up to 15 seconds for roll-call to be ultra-responsive
-        while len(active_slaves) < len(self.slave_processes) and (time.time() - v_start) < 15:
+        # Wait up to 60 seconds for roll-call to allow for Tor proxy latency
+        while len(active_slaves) < len(self.slave_processes) and (time.time() - v_start) < 60:
             # We check ALL pending messages
             messages = self.bus.get_messages(self.config.id)
             for msg in messages:
@@ -220,11 +217,15 @@ class MasterAgent:
                 result = self.master_agent.invoke({"input": prompt})
                 print(f"[Master {self.config.id}] Brain update: {extract_reply(result)[:100]}...")
             
-            # Periodically work on personal task even if no reports
-            elif self.master_task and (time.time() % 60 < 10):
+            # Periodically work on personal task even if no reports (every 10 minutes to avoid spam)
+            elif self.master_task and (time.time() - getattr(self, 'last_personal_work', 0) > 600):
+                self.last_personal_work = time.time()
                 print(f"[Master {self.config.id}] 🛠️ Working on personal task...")
                 result = self.master_agent.invoke({"input": f"Continue working on your personal task: {self.master_task}. Write code and improve the project."})
                 print(f"[Master {self.config.id}] Task progress: {extract_reply(result)[:100]}...")
+
+            # Prevent CPU/API spam with a loop sleep
+            time.sleep(5)
 
             # 2. Update Master heartbeat
             self.bus.update_status(self.config.id, "active")
