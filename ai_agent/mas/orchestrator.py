@@ -70,45 +70,28 @@ class MasterAgent:
         """Use the Master's LLM to split the task into sub-tasks."""
         print(f"[Master {self.config.id}] 🏛️ CALCULATING MISSION ARCHITECTURE...")
         
-        # We use the RAW LLM for splitting to avoid ReAct agent overhead and timeouts
-        headers = {
-            "Authorization": f"Bearer {self.config.api_key.split(',')[0].strip()}" if self.config.api_key else ""
-        }
-        
-        master_llm = TenaciousOllama(
-            model=self.config.model,
-            base_url=self.config.api_url,
-            temperature=0,
-            num_ctx=32768,
-            client_kwargs={"headers": headers}
-        )
-
-        # Full agent for monitoring (includes tools)
+        # Full agent for monitoring and architecture
         self.master_agent = build_agent(
             work_dir=self.workspace,
-            model_name=self.config.model,
-            ollama_url=self.config.api_url,
-            ollama_key=self.config.api_key,
-            use_mas_tools=True
+            agent_id=self.config.id,
+            model=self.config.model,
+            api_url=self.config.api_url,
+            api_key=self.config.api_key,
+            parent_id="USER"
         )
         
-        num_tasks = len(self.config.slaves)
-        if self.config.can_coding:
-            num_tasks += 1
-            
-        prompt = f"""
-        MANDATORY PROTOCOL: You are the Root Master. You must architect a strategy and STOP once tasks are assigned.
-        1. Analyze core files ONLY if absolutely necessary.
-        2. Write your high-level summary to 'project_analysis.md' and IMMEDIATELY STOP.
-        3. Split this goal into exactly {num_tasks} distinct, modular sub-tasks.
-        Assign tasks to slaves listed below.
-        {"(If necessary, assign a task to yourself: root_master)" if self.config.can_coding else ""}
-        
-        GOAL: {task_description}
-        SLAVES: {[s.id for s in self.config.slaves]}
-        
-        Return ONLY a JSON list of objects: [{{"slave_id": "id", "task": "detailed instruction"}}]
-        """
+        manifest = self.task_assignments
+        prompt = (
+            f"You are the Root Master of a Multi-Agent Resilient System. Your goal: {task_description}\n\n"
+            f"CURRENT TASK MANIFEST (Status of Slaves):\n{json.dumps(manifest, indent=2)}\n\n"
+            f"AVAILABLE SLAVES: {[s.id for s in self.config.slaves]}\n\n"
+            "MANDATORY ARCHITECTURE PROTOCOL:\n"
+            "1. CHECK THE MANIFEST: If a slave is already in the manifest, they are WORKING. Do NOT re-assign them. Simply note their task as 'PENDING'.\n"
+            "2. ASSIGN ONLY IDLE SLAVES: Only create NEW tasks for slaves who are not in the manifest.\n"
+            "3. ANALYZE & SUMMARIZE: Analyze the project structure and write your architectural summary to 'project_analysis.md' ONLY if it needs update.\n"
+            "4. OUTPUT FORMAT: Return ONLY a JSON list of NEW objects for idle slaves: [{\"slave_id\": \"id\", \"task\": \"detailed instruction\"}].\n"
+            "If all slaves are busy, return an empty list []."
+        )
         
         try:
             print(f"[Master {self.config.id}] 🧠 CONSULTING BRAIN FOR STRATEGY...")
