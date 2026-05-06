@@ -230,9 +230,27 @@ def main():
                 print("🚀 Changes detected. Pushing to remote...")
                 run_command(["git", "commit", "-m", f"MARS: Mission Sync ({config.id})"], cwd=root_dir, label="Final Commit")
                 # Force push to main
-                run_command(["git", "push", "origin", "HEAD:main"], cwd=root_dir, label="Final Push")
+                run_command(["git", "push", "origin", "main"], cwd=root_dir, label="Final Push")
             else:
                 print("✅ No changes to push. Workspace is clean.")
+
+        # FINAL SUCCESSOR WATCH: If the master abdicated, keep the script alive 
+        # so the promoted slave can finish the mission.
+        if 'root_master' in locals() and getattr(root_master, 'abdicated', False):
+            print("[System] 👑 Succession in progress. Keeping mission alive for the new leader...")
+            slave_procs = getattr(root_master, 'slave_procs', [])
+            while any(p.poll() is None for p in slave_procs):
+                time.sleep(10)
+                # Mission Completion Check
+                manifest_path = root_dir / ".mas" / "global_task_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r") as f:
+                            m = json.load(f)
+                        if m and all(t.get("status") == "completed" for t in m.values()):
+                            print("[System] Successor has COMPLETED the mission. Shutting down.")
+                            break
+                    except: pass
 
 if __name__ == "__main__":
     main()
