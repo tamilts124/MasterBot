@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 from .config_loader import AgentConfig
 from .communication import MessageBus
 from .network_manager import TorManager, setup_agent_env
+from ..agent import TenaciousOllama, build_agent, extract_reply
 
 class MasterAgent:
     def __init__(self, config: AgentConfig, bus: MessageBus, tor: TorManager, workspace: Path):
@@ -71,7 +72,6 @@ class MasterAgent:
         """Use the Master's LLM to split the task into sub-tasks."""
         print(f"[Master {self.config.id}] 🏛️ CALCULATING MISSION ARCHITECTURE...")
         
-        from ..agent import TenaciousOllama, build_agent, extract_reply
         # We use the RAW LLM for splitting to avoid ReAct agent overhead and timeouts
         headers = {
             "Authorization": f"Bearer {self.config.api_key.split(',')[0].strip()}" if self.config.api_key else ""
