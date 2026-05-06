@@ -28,6 +28,20 @@ class TenaciousOllama(ChatOllama):
         max_retries = max(3, len(all_keys))
         retry_delay = 5
         
+        # 1. Internal Loop Detection (Repetition Guard)
+        # Check if the last 3 tool calls were identical
+        last_tool_calls = []
+        for m in reversed(messages):
+            if hasattr(m, "tool_calls") and m.tool_calls:
+                for tc in m.tool_calls:
+                    last_tool_calls.append(f"{tc['name']}:{json.dumps(tc['args'], sort_keys=True)}")
+            if len(last_tool_calls) >= 3: break
+        
+        if len(last_tool_calls) >= 3 and all(x == last_tool_calls[0] for x in last_tool_calls):
+            loop_msg = "\n\n[SYSTEM ERROR] LOOP DETECTED: You have performed the exact same action 3 times. You are FORBIDDEN from repeating it. You must either change your strategy, ask for help, or STOP and report current progress now."
+            messages.append(HumanMessage(content=loop_msg))
+            print(f"[Brain {agent_id}] ⚠️ INTERNAL LOOP BREAKER ACTIVATED. Forcing brain reset.")
+
         for attempt in range(max_retries):
             try:
                 print(f"[Brain {agent_id}] Starting generation (Proxy: {active_proxy}, Attempt: {attempt + 1})")
@@ -208,7 +222,10 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
 
             actual_input = input_data["input"] if isinstance(input_data, dict) else input_data
 
-            # Invoke the agent graph
+            # Enforce strict recursion limit to break infinite loops (MAX 15 steps per turn)
+            if config is None: config = {"configurable": {"thread_id": agent_id}}
+            if "recursion_limit" not in config: config["recursion_limit"] = 15
+            
             result = agent.invoke({"messages": [HumanMessage(content=actual_input)]}, config)
             
             # Return the last message content to maintain compatibility
