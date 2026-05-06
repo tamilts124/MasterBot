@@ -118,8 +118,21 @@ def main():
         is_stale = (last_seen > 0 and time.time() - last_seen > 300)
         
         if master_status.get("status") in ["died", "offline"] or is_stale:
-            if is_stale:
-                print(f"[Worker {args.id}] ⚠️ MASTER SILENCE DETECTED (5m). Assuming crash. Starting election...")
+            # [SUCCESSION HIERARCHY]
+            # 1. Wait 2 minutes to see if an 'Uncle' (Coworker Master) takes over.
+            if not hasattr(main, "succession_timer"):
+                main.succession_timer = time.time()
+                print(f"[Worker {args.id}] ⚠️ MASTER {args.parent} FAILURE. Waiting 2m for Coworker Master takeover...")
+            
+            elapsed_wait = time.time() - main.succession_timer
+            if elapsed_wait < 120:
+                # We stay in the loop to receive potential 'takeover_command' or 'new_master_announcement'
+                time.sleep(5)
+                continue
+
+            # 2. No takeover? Proceed to Self-Promotion Election.
+            print(f"[Worker {args.id}] ⏳ 2m Timeout reached. No Peer Master claimed us. Initiating Self-Promotion...")
+            
             # Election: Am I the alpha slave?
             all_candidates = sorted([args.id] + coworkers)
             alpha_id = all_candidates[0]
@@ -240,6 +253,7 @@ def main():
                     continue
 
             elif msg["type"] == "takeover_command":
+                if hasattr(main, "succession_timer"): del main.succession_timer
                 failed_id = msg["content"].get("failed_agent_id")
                 new_master_id = msg["content"].get("new_master_id", args.id)
                 
@@ -257,6 +271,7 @@ def main():
                 handle_emergency("shutdown", "Mission Complete")
             
             elif msg["type"] == "new_master_announcement":
+                if hasattr(main, "succession_timer"): del main.succession_timer
                 new_master = msg["content"]["new_master"]
                 print(f"[Worker {args.id}] ACK: {new_master} is my NEW MASTER.")
                 # Dynamically update the parent ID for future reporting
