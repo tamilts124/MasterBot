@@ -63,9 +63,15 @@ def main():
 
     last_heartbeat = 0
     while True:
-        # 1. Master Watchdog
+        # 1. Master Watchdog (With Stale Detection)
         master_status = bus.get_agent_status(args.parent)
-        if master_status.get("status") in ["died", "offline"]:
+        last_seen = master_status.get("timestamp", 0)
+        # If Master is silent for > 5 minutes, we assume it crashed and start election
+        is_stale = (last_seen > 0 and time.time() - last_seen > 300)
+        
+        if master_status.get("status") in ["died", "offline"] or is_stale:
+            if is_stale:
+                print(f"[Worker {args.id}] ⚠️ MASTER SILENCE DETECTED (5m). Assuming crash. Starting election...")
             # Election: Am I the alpha slave?
             all_candidates = sorted([args.id] + coworkers)
             alpha_id = all_candidates[0]
@@ -176,9 +182,12 @@ def main():
                         time.sleep(5)
                         continue
                     
-                    print(f"[Worker {args.id}] FATAL ERROR: {e}")
+                    print(f"[Worker {args.id}] 🛑 CRITICAL LIMIT OR ERROR: {e}. Entering Deep Sleep (10m) to wait for reset...")
                     broadcast_limit_reached(str(e))
-                    sys.exit(137)
+                    # Instead of dying, we stay alive so we can still participate in elections or resume later
+                    bus.update_status(args.id, "sleeping", f"Limit Reached: {str(e)[:50]}")
+                    time.sleep(600)
+                    continue
 
             elif msg["type"] == "takeover_command":
                 failed_id = msg["content"].get("failed_agent_id")
