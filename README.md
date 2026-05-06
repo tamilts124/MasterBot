@@ -1,51 +1,64 @@
-# 🤖 WhatsApp AI Agent Automation (Hardened)
+# 🌌 MARS: Multi-Agent Resilient System (Hardened)
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/tamilts124/AI_CLI/developer_agent.yml?style=for-the-badge)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/tamilts124/AI_CLI/mas_agent_tor.yml?style=for-the-badge)
 ![Python Version](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)
-![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=for-the-badge&logo=docker)
-![Tor](https://img.shields.io/badge/Tor-Integrated-7D4698?style=for-the-badge&logo=torproject)
+![Architecture](https://img.shields.io/badge/Architecture-Multi--Agent-FF6F00?style=for-the-badge)
+![Persistence](https://img.shields.io/badge/State-Git--Persistent-success?style=for-the-badge)
 
-A premium, hardened autonomous developer agent system. This project leverages **Docker**, **GitHub Actions**, **Tor Network**, and **Ollama** to provide a resilient, 24/7 automated development experience with multi-key support and IP rotation.
+**MARS** is an elite, autonomous developer squad architecture designed for extreme resilience and high-coordination development. It transforms single-agent AI into a collaborative, hierarchical team that maintains state across environments via Git-backed persistence.
 
-## 🌟 Key Features
+## 🚀 Key Features
 
--   **Tor IP Rotation**: All API requests are routed through the **Tor Network** (SOCKS5 proxy). The agent automatically requests a new Tor circuit (`NEWNYM`) on retries and rotations to bypass connection drops and IP rate limits.
--   **Hardened Execution Loop**: 
-    -   **Selective Retries**: Intelligent retry logic for transient "Server disconnected" errors.
-    -   **Multi-Key Cycling**: Automatically rotates through a list of Ollama API keys when limits are reached.
-    -   **Global Wait Cycle**: If all keys are exhausted, the agent enters a 15-minute "cool-down" before restarting the cycle, ensuring continuous progress.
--   **Automated Deployment**: GitHub Actions triggers on schedule or manual dispatch.
--   **Emergency Progress Save**: Automatically stages, commits, and pushes changes to GitHub whenever a session is interrupted or a key is rotated.
--   **Dockerized API**: Runs the [WhatsApp API](https://github.com/tamilts124/WhatsApp_API) in a stable container for communication.
+-   **Elite Squad Coordination**:
+    -   **Root Master**: Acts as the Architect, splitting goals into modular tasks and monitoring squad health.
+    -   **Autonomous Slaves**: Capable developer agents that share plans, ask doubts, and work cooperatively.
+    -   **Mandatory Peer Review**: Agents must validate implementation plans with the squad before writing code.
+-   **Extreme Resilience**:
+    -   **History Mode**: Full conversation history persistence using `MemorySaver`.
+    -   **Circuit Breakers**: Automatic task reassignment if an agent reaches its limit or crashes.
+    -   **Self-Healing**: If a Master fails, a Slave is automatically promoted to take over the mission.
+-   **Portability & Privacy**:
+    -   **Workspace Encapsulation**: All agent communication, logs, and session state are stored in a local `.mas/` folder inside the project workspace.
+    -   **Git-Backed Memory**: The `.mas` state is pushed to Git, allowing the mission to "live" in the repository and continue across different environments.
+    -   **Tor IP Rotation**: Integrated Tor support for anonymous and resilient API communication.
+-   **Security**:
+    -   **Secret Configs**: Support for loading full squad configurations from GitHub Secrets (`MAS_CONFIG`).
+    -   **Auto-Ignore**: Sensitive configuration files are automatically kept out of version control via `.gitignore`.
 
-## 🛠 Architecture
+## 🛠 MAS Architecture
 
-1.  **Workflow Trigger**: Scheduled via CRON or manual dispatch.
-2.  **Network Shield**: **Tor Service** initializes with Control Port access for IP rotation.
-3.  **Environment Setup**: Ubuntu-latest runner with Docker, Python 3.10, and Tor.
-4.  **Authentication**: Securely restores `auth_info` WhatsApp session data.
-5.  **Service Startup**: WhatsApp API container initializes on port 3000.
-6.  **Hardened Agent**: Python developer agent executes with the **Master Architect Prompt**, cycling keys and IPs as needed.
+1.  **Orchestration**: `run_mas.py` launches the Root Master.
+2.  **Task Splitting**: The Master analyzes the goal and assigns sub-tasks to the Slave squad via a local Message Bus.
+3.  **Collaborative Loop**: Agents communicate in real-time, sharing progress and asking for feedback.
+4.  **Verification**: Master reviews completed work and assigns follow-up improvements or new features.
 
-## 🔐 Required Secrets & Variables
+## 🔐 Configuration
 
-| Name | Type | Description |
-| :--- | :--- | :--- |
-| `OLLAMA_API_KEYS` | Secret | Comma-separated list of Ollama API keys for rotation. |
-| `TARGET_REPO_TOKEN` | Secret | GitHub PAT for pushing changes to the target repository. |
-| `AUTH_INFO_PASSWORD` | Secret | Password for the `auth_info.7z` encrypted file. |
-| `WHATSAPP_NUMBER1` | Secret | Primary WhatsApp number for SOS communication. |
-| `DEVELOPER_PROMPT` | Variable | The "Master Architect" instructions for the developer agent. |
-| `TARGET_REPO_URL` | Variable | The URL of the repository the agent is developing. |
-| `DEVELOPER_MODEL` | Variable | The Ollama model to use (e.g., `qwen3-coder:480b-cloud`). |
+MARS uses a `mas_config.json` file (or a `MAS_CONFIG` GitHub Secret) to define the squad:
 
-## 🚀 Getting Started
+```json
+{
+  "id": "root_master",
+  "model": "gemma4:31b-cloud",
+  "api_url": "https://ollama.com",
+  "api_key": "YOUR_MASTER_KEY",
+  "slaves": [
+    { "id": "slave_1", "api_key": "YOUR_SLAVE_KEY" },
+    { "id": "slave_2", "api_key": "YOUR_SLAVE_KEY" }
+  ]
+}
+```
 
-1.  Clone the repository.
-2.  Ensure `auth_info.7z` is present in the root directory for WhatsApp connectivity.
-3.  Configure the Secrets and Variables in your GitHub repository settings.
-4.  Trigger the **AI Developer Agent** workflow from the **Actions** tab.
+## 🚀 Running Locally
+
+```powershell
+python run_mas.py --config mas_config.json --prompt "Build a fullstack dashboard"
+```
+
+## 🤖 GitHub Actions
+
+Trigger the **MARS Agent (Tor Enabled)** workflow to launch the squad in a headless, persistent environment.
 
 ---
 
-Built with ❤️ by [Tamil](https://github.com/tamilts124)
+Built with ❤️ for Autonomous Engineering.

@@ -49,12 +49,11 @@ jobs:
         env:
           TARGET_REPO_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
           # Use vars for non-sensitive data, secrets for keys
-          PROMPT: "${{ github.event.inputs.prompt || vars.MAS_MISSION_PROMPT }}"
+          PROMPT: "${{ github.event.inputs.prompt || vars.DEVELOPER_PROMPT }}"
           TARGET_REPO: ${{ vars.TARGET_REPO_URL }}
           # Real-time logging
           PYTHONUNBUFFERED: "1"
         run: |
-          # run_mas.py will use Tor by default (no --no-tor flag)
           python run_mas.py \
             --config mas_config.json \
             --prompt "$PROMPT" \
