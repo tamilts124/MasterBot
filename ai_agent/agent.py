@@ -1,22 +1,88 @@
 import os
+import time
+import json
+import logging
+from typing import Any, List, Dict, Optional
 from pathlib import Path
-from typing import Any, List, Optional, Union
 
-from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_ollama import ChatOllama
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langgraph.prebuilt import create_react_agent
+from langgraph.checkpoint.memory import MemorySaver
 from langchain.agents import create_agent
-from langchain_core.messages import BaseMessage
+from langchain_community.agent_toolkits import FileManagementToolkit
 
 from .tools import (
-    rename_file, run_bat, run_bash, run_python,
+    rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
-    web_search, fetch_url, git_commit_and_push
+    report_to_master, ask_coworker, get_mas_identity, list_team_members, 
+    check_agent_status, send_mas_message, inspect_agent_communication
 )
+
+class TenaciousOllama(ChatOllama):
+    def _generate(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, **kwargs):
+        agent_id = os.environ.get("AGENT_ID", "Agent")
+        active_proxy = os.environ.get("HTTP_PROXY", "DIRECT")
+        
+        max_retries = 3
+        retry_delay = 5
+        
+        for attempt in range(max_retries):
+            try:
+                print(f"[Brain {agent_id}] Starting generation (Proxy: {active_proxy}, Attempt: {attempt + 1})")
+                
+                all_keys = os.environ.get("API_KEYS", "").split(",")
+                all_keys = [k.strip() for k in all_keys if k.strip()]
+                
+                # Rotate keys if possible
+                current_key = all_keys[attempt % len(all_keys)] if all_keys else ""
+                if hasattr(self, "client_kwargs") and "headers" in self.client_kwargs:
+                    self.client_kwargs["headers"]["Authorization"] = f"Bearer {current_key}"
+                
+                # Log messages for observability
+                self._log_monologue(agent_id, messages)
+                
+                return super()._generate(messages, stop=stop, **kwargs)
+            except Exception as e:
+                # ...
+                # Handle status code -1 (internal server error) or other common transient errors
+                error_str = str(e)
+                if attempt < max_retries - 1 and ("-1" in error_str or "Internal Server Error" in error_str or "503" in error_str):
+                    print(f"[Brain {agent_id}] ⚠️ Transient API Error: {e}. Retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2 # Exponential backoff
+                    continue
+                raise e
+
+    def _log_monologue(self, agent_id: str, messages: List[BaseMessage]):
+        """Log the agent's internal monologue to a file for debugging."""
+        try:
+            # Use absolute path for logs to avoid issues with os.chdir
+            log_dir = Path(os.environ.get("PROJECT_ROOT", ".")).absolute() / ".mas" / "monologues"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / f"{agent_id}.log"
+            
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(f"\n--- Generation Loop at {time.ctime()} ---\n")
+                for msg in messages:
+                    role = "AI"
+                    if hasattr(msg, "type"): role = msg.type
+                    content = msg.content if hasattr(msg, "content") else str(msg)
+                    f.write(f"[{role}]: {str(content)[:1000]}...\n")
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        for tc in msg.tool_calls:
+                            f.write(f"  [Tool Call]: {tc['name']}({tc['args']})\n")
+                            # Transparent print for user visibility
+                            # Truncate args for clean console display
+                            clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in tc['args'].items()}
+                            print(f"[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}({clean_args})")
+        except Exception as e:
+            print(f"[Log Error] Failed to write monologue: {e}")
 
 def build_agent(work_dir: Path, model_name: str, streaming: bool = False, 
                 whatsapp_jid: Optional[str] = None, whatsapp_url: Optional[str] = None,
                 ollama_url: Optional[str] = None, ollama_key: Optional[str] = None,
-                ollama_ctx: int = 65536):
+                ollama_ctx: int = 65536, use_mas_tools: bool = False):
     """Create a ReAct agent bound to ``work_dir`` and ``model_name``."""
     work_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(work_dir)
@@ -27,62 +93,104 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     ).get_tools()
     
     # Generic tools
-    tools.extend([rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push])
+    tools.extend([
+        rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
+        report_to_master, ask_coworker, get_mas_identity, list_team_members, 
+        check_agent_status, send_mas_message, inspect_agent_communication
+    ])
 
-    # Conditionally add WhatsApp tools
     if whatsapp_jid:
         os.environ["WHATSAPP_TARGET_JID"] = whatsapp_jid
         if whatsapp_url:
             os.environ["WHATSAPP_BASE_URL"] = whatsapp_url
         tools.extend([is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages])
 
-    # Ollama configuration
     ollama_kwargs = {
         "model": model_name,
-        "format": "json",
-        "streaming": streaming,
         "temperature": 0,
         "num_ctx": ollama_ctx
     }
     if ollama_url:
         ollama_kwargs["base_url"] = ollama_url
     
-    if ollama_key:
-        # Pass API key and User-Agent via headers
-        ollama_kwargs["client_kwargs"] = {
-            "headers": {
-                "Authorization": f"Bearer {ollama_key}",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
-            }
-        }
-
-    llm = ChatOllama(**ollama_kwargs)
-    return create_agent(llm, tools)
-
-def extract_reply(result: Any) -> str:
-    """Helper to extract plain-text reply from various LangChain result shapes."""
-    if isinstance(result, str):
-        return result
+    proxy = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY")
     
-    if hasattr(result, "content"):
-        return str(result.content)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+    }
+    if ollama_key:
+        headers["Authorization"] = f"Bearer {ollama_key}"
+    
+    # Professional Native Proxy Implementation
+    if proxy and "DIRECT" not in proxy:
+        ollama_kwargs["client_kwargs"] = {
+            "proxy": proxy, 
+            "headers": headers,
+            "timeout": 120
+        }
+    else:
+        ollama_kwargs["client_kwargs"] = {"headers": headers}
 
-    if isinstance(result, dict):
-        if "output" in result and isinstance(result["output"], str):
-            return result["output"]
+    # Create the agent using the built-in create_agent which handles the tool loop
+    # Use MemorySaver for persistence
+    memory = MemorySaver()
+    
+    agent = create_react_agent(
+        model=TenaciousOllama(**ollama_kwargs),
+        tools=tools,
+        checkpointer=memory,
+        prompt=(
+            "You are a highly capable autonomous developer agent in an elite squad.\n"
+            "AVAILABLE TOOLS:\n"
+            "- FILE OPS: 'read_file', 'write_file', 'list_directory', 'rename_file'\n"
+            "- EXECUTION: 'run_bat', 'run_bash', 'run_python'\n"
+            "- RESEARCH: 'web_search', 'fetch_url'\n"
+            "- VERSION CONTROL: 'git_status', 'git_commit_and_push', 'git_pull', 'git_stash_save', 'git_stash_pop'\n"
+            "- WHATSAPP: 'is_whatsapp_connected', 'send_whatsapp_message', 'get_whatsapp_last_messages'\n"
+            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'check_agent_status', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members'\n\n"
+            "MANDATORY COORDINATION RULES:\n"
+            "0. NO INDIVIDUAL WORK: You are FORBIDDEN from working in isolation. You must cooperate with others at every stage of the development cycle. A solo agent is a failing agent.\n"
+            "1. COMMUNICATION IS MANDATORY: You MUST communicate with your coworkers and the Master at all times. If you are not talking, you are failing.\n"
+            "2. SHARE & VALIDATE PLAN: Before starting any task, you MUST share your implementation plan with your coworkers using 'send_mas_message' or 'ask_coworker'. You MUST wait for acknowledgment or feedback from the squad before proceeding to implementation.\n"
+            "3. ACKNOWLEDGE & FEEDBACK: If a coworker shares a plan, you MUST read it. If you agree, acknowledge them immediately. If you have a better approach or spot a flaw, you MUST share your ideas with them to improve the project before they start implementing.\n"
+            "4. IMPORTANT DECISIONS: For any major architectural change, critical file deletion, or important decision, you MUST consult the Master for approval before proceeding.\n"
+            "5. ASK WHEN IN DOUBT: If you have any doubt, question, or architectural concern, you MUST ask the Master or a coworker immediately. You are authorized to ask ANYONE in the squad for help.\n"
+            "5. MONITOR: Stay aware of what your coworkers are doing. Use 'check_agent_status' and 'inspect_agent_communication' to align your work.\n"
+            "6. REPORT: You MUST report to the Master ('report_to_master') after every significant milestone and upon task completion.\n"
+            "7. COOPERATE: If your work is done, you MUST offer assistance to others. Work cooperatively as one unit.\n"
+            "8. NO LOOPS: If you repeat an action twice without success, STOP and ask for guidance."
+        )
+    )
+    
+    # Wrap the agent to handle state and input transformation
+    class AgentWrapper:
+        def invoke(self, input_data):
+            # Extract thread_id from input or use agent_id
+            thread_id = os.environ.get("AGENT_ID", "default_thread")
+            config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
+            
+            # Transform input if needed
+            if isinstance(input_data, dict) and "input" in input_data:
+                actual_input = input_data["input"]
+            else:
+                actual_input = input_data
+                
+            # Invoke the agent graph
+            result = agent.invoke({"messages": [HumanMessage(content=actual_input)]}, config)
+            
+            # Return the last message content to maintain compatibility
+            # In langgraph, result is a dict with 'messages'
+            return result["messages"][-1]
+
+    return AgentWrapper()
+
+def extract_reply(ai_msg) -> str:
+    # If it's the state dict from CompiledStateGraph
+    if isinstance(ai_msg, dict) and "messages" in ai_msg:
+        ai_msg = ai_msg["messages"][-1]
         
-        messages = result.get("messages")
-        if isinstance(messages, list) and messages:
-            for msg in reversed(messages):
-                if hasattr(msg, "content") and msg.content:
-                    return str(msg.content)
-        
-        if "model" in result and isinstance(result["model"], dict):
-            return extract_reply(result["model"])
-
-        if len(result) == 1:
-            val = list(result.values())[0]
-            if isinstance(val, str):
-                return val
-
-    return str(result)
+    if isinstance(ai_msg, str):
+        return ai_msg
+    if hasattr(ai_msg, "content"):
+        return ai_msg.content
+    return str(ai_msg)

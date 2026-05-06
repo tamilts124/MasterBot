@@ -333,3 +333,98 @@ def git_commit_and_push(message: str) -> str:
         return f"Successfully committed and pushed: {message}"
     except Exception as exc:
         return f"[Error] Git operation failed: {exc}"
+        
+def get_bus():
+    from pathlib import Path
+    from .mas.communication import MessageBus
+    # Use the absolute path to .mas to ensure it works from any subdirectory
+    comm_path = Path(os.environ.get("PROJECT_ROOT", ".")).absolute() / ".mas"
+    return MessageBus(comm_path)
+
+@tool
+def report_to_master(summary: str, task_id: str) -> str:
+    """Report task completion and a summary of achievements to the Master agent."""
+    agent_id = os.environ.get("AGENT_ID")
+    parent_id = os.environ.get("PARENT_ID")
+    if not (agent_id and parent_id): return "[Error] MAS context missing."
+    
+    print(f"\n[REPORT] {agent_id} -> Master {parent_id}: {summary[:100]}...\n", flush=True)
+    get_bus().send_message(agent_id, parent_id, {"summary": summary, "task_id": task_id}, msg_type="task_report")
+    return f"Report sent to Master {parent_id}"
+
+@tool
+def ask_coworker(coworker_id: str, question: str) -> str:
+    """Send a coordination request to a same-level coworker."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id: return "[Error] MAS context missing."
+    
+    print(f"\n[COMM] {agent_id} -> Coworker {coworker_id}: {question[:100]}...\n", flush=True)
+    get_bus().send_message(agent_id, coworker_id, question, msg_type="text")
+    return f"Message sent to coworker {coworker_id}"
+
+@tool
+def get_mas_identity() -> str:
+    """Retrieve the agent's own MAS ID, hierarchical level, and parent Master ID."""
+    agent_id = os.environ.get("AGENT_ID", "Unknown")
+    parent_id = os.environ.get("PARENT_ID", "None")
+    level = os.environ.get("AGENT_LEVEL", "0")
+    return f"My ID: {agent_id} | My Level: {level} | My Master: {parent_id}"
+
+@tool
+def list_team_members() -> str:
+    """List the IDs of the direct Master, all Coworkers, and any active Slaves.
+    The Root Master will see the entire recursive hierarchy of the squad."""
+    master = os.environ.get("PARENT_ID", "None")
+    coworkers = os.environ.get("COWORKERS", "None")
+    hierarchy = os.environ.get("MAS_HIERARCHY")
+    
+    if hierarchy:
+        try:
+            h_map = json.loads(hierarchy)
+            return f"Full Squad Hierarchy: {json.dumps(h_map, indent=2)}\nMaster: {master} | Coworkers: {coworkers}"
+        except:
+            pass
+            
+    return f"Master: {master} | Coworkers: {coworkers}"
+
+@tool
+def check_agent_status(agent_id: str) -> str:
+    """Check the real-time status and current task of a specific agent."""
+    status = get_bus().get_agent_status(agent_id)
+    return f"Agent {agent_id} Status: {status.get('status')} | Current Task: {status.get('current_task')}"
+
+@tool
+def send_mas_message(to_id: str, message: str) -> str:
+    """Send a coordination message to any direct Master, Coworker, or Slave."""
+    agent_id = os.environ.get("AGENT_ID")
+    parent_id = os.environ.get("PARENT_ID")
+    coworkers = os.environ.get("COWORKERS", "").split(",")
+    comm_anyone = os.environ.get("COMMUNICATE_ANYONE", "false").lower() == "true"
+    comm_same = os.environ.get("COMMUNICATE_SAME_LEVEL", "true").lower() == "true"
+    
+    if not agent_id: return "[Error] MAS context missing."
+    
+    # Permission Logic
+    is_master = to_id == parent_id
+    is_coworker = to_id in coworkers
+    
+    if not (is_master or is_coworker or comm_anyone):
+        return f"[Permission Denied] You cannot communicate with {to_id} unless 'communicate_anyone' is enabled."
+    
+    if is_coworker and not comm_same:
+        return f"[Permission Denied] Same-level communication is disabled for you."
+    
+    print(f"\n[COMM] {agent_id} -> {to_id}: {message[:100]}...\n", flush=True)
+    get_bus().send_message(agent_id, to_id, message, msg_type="text")
+    return f"Message sent to {to_id}"
+
+@tool
+def inspect_agent_communication(agent_id: str) -> str:
+    """[Master Only] Inspect the recent archived messages of a specific agent to audit their coordination."""
+    history = get_bus().get_agent_history(agent_id)
+    if not history: return f"No archived communication found for {agent_id}."
+    
+    summary = f"Recent Communication for {agent_id}:\n"
+    for msg in history:
+        summary += f"[{msg['type']}] {msg['from']} -> {msg['to']}: {str(msg['content'])[:50]}...\n"
+    return summary

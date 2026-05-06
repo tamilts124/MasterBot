@@ -15,3 +15,5 @@ WhatsApp_API/
 target_repo/
 target_repo_workspace/
 launcher.py
+mas_workspace/
+mas_config.json

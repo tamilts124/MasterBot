@@ -121,10 +121,8 @@ def main():
     key_index = 0
     while True:
         if key_index >= len(keys):
-            print(f"\n[INFO] All {len(keys)} keys processed. Waiting 15 minutes before restarting cycle...")
-            time.sleep(900) # 15 minutes cool-down
-            key_index = 0
-            continue
+            print(f"\n[INFO] All {len(keys)} keys processed. restarting cycle...")
+            break
 
         current_key = keys[key_index]
         print(f"\n--- Attempting with Ollama API Key {key_index + 1}/{len(keys)} ---")
@@ -161,7 +159,6 @@ def main():
             if agent_res.returncode == 0:
                 # Task completed successfully - keep the loop going with the same key
                 print("\n--- Session finished. Starting next development cycle in 5 seconds... ---")
-                time.sleep(5)
                 attempt = 0 # Reset retries for next cycle
                 continue # Run again with the same key
 
@@ -172,7 +169,6 @@ def main():
             if "server disconnected without sending a response" in error_output:
                 print("Detected 'Server disconnected' error. Retrying with new Tor IP...")
                 attempt += 1
-                time.sleep(5 * attempt) # Incremental wait
                 continue
             
             # If it's a limit or any other error, rotate key

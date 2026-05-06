@@ -1,0 +1,63 @@
+name: MARS Agent (Tor Enabled)
+
+on:
+  workflow_dispatch:
+    inputs:
+      prompt:
+        description: 'Mission Goal (Optional override)'
+        required: false
+
+jobs:
+  run-mars-squad:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout AI CLI Repository
+        uses: actions/checkout@v4
+
+      - name: Install 7-Zip and Tor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full tor netcat-openbsd
+          # Configure Tor Control Port
+          sudo bash -c 'cat >> /etc/tor/torrc <<EOF
+          ControlPort 9051
+          CookieAuthentication 0
+          EOF'
+          sudo service tor restart
+          # Verify Tor is running
+          echo "Current IP via Tor:"
+          curl --socks5-hostname 127.0.0.1:9050 https://api.ipify.org || echo "Tor not ready yet"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Create MAS Config
+        env:
+          MAS_CONFIG: ${{ secrets.MAS_CONFIG }}
+        run: |
+          echo "$MAS_CONFIG" > mas_config.json
+
+      - name: Run MARS Orchestrator
+        env:
+          TARGET_REPO_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+          # Use vars for non-sensitive data, secrets for keys
+          PROMPT: "${{ github.event.inputs.prompt || vars.MAS_MISSION_PROMPT }}"
+          TARGET_REPO: ${{ vars.TARGET_REPO_URL }}
+          # Real-time logging
+          PYTHONUNBUFFERED: "1"
+        run: |
+          # run_mas.py will use Tor by default (no --no-tor flag)
+          python run_mas.py \
+            --config mas_config.json \
+            --prompt "$PROMPT" \
+            --repo-url "$TARGET_REPO" \
+            --repo-token "$TARGET_REPO_TOKEN" \
+            --workspace mas_workspace
