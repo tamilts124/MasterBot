@@ -185,9 +185,27 @@ def main():
         else:
             print("[Critical] No slaves available for promotion. Mission failed.")
         
-    # 7. Shutdown (Only if we didn't abdicate)
+    # 7. Shutdown & Final Sync
     if 'root_master' in locals() and not getattr(root_master, 'abdicated', False):
         root_master.shutdown_squad()
+        
+        print("\n[System] Performing Final Workspace Sync...")
+        # Authenticate URL again just in case
+        if args.repo_url and args.repo_token:
+            authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
+            run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir)
+            
+        run_command(["git", "add", "."], cwd=root_dir, label="Final Stage")
+        status_res = run_command(["git", "status", "--porcelain"], cwd=root_dir)
+        if status_res.stdout.strip():
+            print("🚀 Changes detected. Pushing to remote...")
+            run_command(["git", "commit", "-m", "MARS: Final mission sync and consolidation"], cwd=root_dir, label="Final Commit")
+            # Get current branch
+            branch_res = run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root_dir)
+            branch = branch_res.stdout.strip() or "main"
+            run_command(["git", "push", "origin", branch], cwd=root_dir, label="Final Push")
+        else:
+            print("✅ No changes to push. Workspace is clean.")
 
 if __name__ == "__main__":
     main()
