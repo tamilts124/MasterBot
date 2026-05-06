@@ -112,10 +112,23 @@ def main():
                 task_id = f"task_{int(time.time())}"
                 print(f"[Worker {args.id}] Received task: {task}")
                 
+                # 1. INSTANT ACK: Tell Master immediately that we've started to prevent re-assignment loops
+                bus.send_message(args.id, args.parent, {"task_id": task_id, "status": "acknowledged"}, msg_type="task_ack")
+                
                 try:
                     bus.update_status(args.id, "working", task)
-                    
                     log_history("task_start", {"id": task_id, "content": task})
+
+                    # 2. BACKGROUND HEARTBEAT: Keep status alive while the AI brain is thinking
+                    import threading
+                    stop_heartbeat = threading.Event()
+                    def heartbeat_worker():
+                        while not stop_heartbeat.is_set():
+                            bus.update_status(args.id, "working", task)
+                            time.sleep(30)
+                    
+                    hb_thread = threading.Thread(target=heartbeat_worker, daemon=True)
+                    hb_thread.start()
 
                     # ACTUAL WORK: Invoke the real AI agent
                     print(f"[Worker {args.id}] 🧠 INITIALIZING BRAIN (Model: {args.model})...")
@@ -147,6 +160,10 @@ def main():
                     
                     result = agent.invoke(input_data)
                     summary = extract_reply(result)
+                    
+                    # Stop Heartbeat
+                    stop_heartbeat.set()
+                    hb_thread.join(timeout=1)
                     
                     print(f"[Worker {args.id}] ✅ TASK COMPLETE. Submitting report to Master.")
                     bus.send_message(args.id, args.parent, {"task_id": task_id, "summary": summary}, msg_type="task_report")
