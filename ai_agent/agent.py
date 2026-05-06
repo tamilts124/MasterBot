@@ -160,7 +160,8 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "7. ASK WHEN IN DOUBT: If you have any doubt, ask the Master or a coworker immediately.\n"
             "8. MONITOR: Use 'check_agent_status' and 'inspect_agent_communication' to align your work.\n"
             "9. REPORT: You MUST report to the Master ('report_to_master') after every significant milestone.\n"
-            "10. NO LOOPS: If you repeat an action twice without success, STOP and ask for guidance."
+            "10. NO LOOPS: If you repeat an action twice without success, STOP and ask for guidance.\n"
+            "11. INBOX PRIORITY: If you see an [INBOX ALERT] in your instructions, you are FORBIDDEN from performing any other task until you have used 'inspect_agent_communication' to read the pending messages. Coordination is your highest priority."
         )
     )
     
@@ -171,17 +172,27 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             thread_id = os.environ.get("AGENT_ID", "default_thread")
             config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
             
-            # Transform input if needed
-            if isinstance(input_data, dict) and "input" in input_data:
-                actual_input = input_data["input"]
-            else:
-                actual_input = input_data
-                
+            # Inbox check: Enforce "Read Before Work" policy
+            try:
+                from .mas.communication import MessageBus
+                bus = MessageBus(work_dir / ".mas")
+                pending = bus.get_messages(os.environ.get("AGENT_ID", ""))
+                if pending:
+                    senders = list(set([m['from'] for m in pending]))
+                    inbox_alert = f"\n\n[INBOX ALERT] You have {len(pending)} unread messages from: {', '.join(senders)}. You MUST use 'inspect_agent_communication' to read them immediately before continuing your work. This is mandatory MARS protocol."
+                    if isinstance(input_data, dict) and "input" in input_data:
+                        input_data["input"] += inbox_alert
+                    else:
+                        input_data = str(input_data) + inbox_alert
+            except Exception as e:
+                print(f"[Inbox Error] {e}")
+
+            actual_input = input_data["input"] if isinstance(input_data, dict) else input_data
+
             # Invoke the agent graph
             result = agent.invoke({"messages": [HumanMessage(content=actual_input)]}, config)
             
             # Return the last message content to maintain compatibility
-            # In langgraph, result is a dict with 'messages'
             return result["messages"][-1]
 
     return AgentWrapper()
