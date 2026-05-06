@@ -153,9 +153,14 @@ def main():
                     bus.update_status(args.id, "idle")
                 
                 except Exception as e:
-                    error_msg = str(e)
-                    print(f"[Worker {args.id}] FATAL ERROR: {error_msg}")
-                    broadcast_limit_reached(error_msg)
+                    error_msg = str(e).lower()
+                    if "peer closed" in error_msg or "incomplete chunked read" in error_msg or "remote disconnected" in error_msg:
+                        print(f"[Worker {args.id}] 🌐 Network Glitch: {e}. Retrying task...")
+                        time.sleep(5)
+                        continue
+                    
+                    print(f"[Worker {args.id}] FATAL ERROR: {e}")
+                    broadcast_limit_reached(str(e))
                     sys.exit(137)
 
             elif msg["type"] == "takeover_command":

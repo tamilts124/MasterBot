@@ -47,8 +47,8 @@ class TenaciousOllama(ChatOllama):
                 # ...
                 # Handle status code -1 (internal server error) or other common transient errors
                 error_str = str(e)
-                if attempt < max_retries - 1 and ("-1" in error_str or "Internal Server Error" in error_str or "503" in error_str):
-                    print(f"[Brain {agent_id}] ⚠️ Transient API Error: {e}. Retrying in {retry_delay}s...")
+                if attempt < max_retries - 1 and ("-1" in error_str or "Internal Server Error" in error_str or "503" in error_str or "peer closed" in error_str.lower() or "incomplete chunked read" in error_str.lower()):
+                    print(f"[Brain {agent_id}] ⚠️ Transient Network Error: {e}. Retrying in {retry_delay}s...")
                     time.sleep(retry_delay)
                     retry_delay *= 2 # Exponential backoff
                     continue
