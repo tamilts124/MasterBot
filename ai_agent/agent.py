@@ -49,7 +49,7 @@ class TenaciousOllama(ChatOllama):
                 # Handle status code -1 (internal server error) or 429 (limit reached) and other transient errors
                 error_str = str(e)
                 if attempt < max_retries - 1 and ("-1" in error_str or "429" in error_str or "limit reached" in error_str.lower() or "Internal Server Error" in error_str or "503" in error_str or "peer closed" in error_str.lower() or "incomplete chunked read" in error_str.lower()):
-                    print(f"[Brain {agent_id}] ⚠️ Usage Limit or Transient Error: {e}. Rotating key and retrying in {retry_delay}s...")
+                    print(f"[Brain {agent_id}] ⚠️ Usage Limit or Transient Error: {e}. Rotating key and retrying INSTANTLY (Rule #1)... ")
                     pass # NO SLEEP - Rule #1 Compliance
                     retry_delay *= 2 # Exponential backoff
                     continue

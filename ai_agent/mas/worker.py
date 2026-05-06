@@ -128,7 +128,8 @@ def main():
         
         if master_status.get("status") in ["died", "offline"] or is_stale:
             # IMMEDIATE PROMOTION - No wait
-            state_key = f"promotion_wait_{args.parent}_{is_stale}"
+            # Use a combined state key so the two messages don't fight and cause spam
+            state_key = f"promotion_{args.parent}_{is_stale}_{alpha_id}"
             if last_log_state != state_key:
                 print(f"[Worker {args.id}] ⚠️ MASTER {args.parent} FAILURE/SILENCE. Initiating Self-Promotion...")
                 last_log_state = state_key
@@ -166,7 +167,7 @@ def main():
                     print(f"[Worker {args.id}] MASTER {args.parent} DIED. I am the Alpha Slave. Promoting to Master...")
                     become_master(bus, coworkers)
             else:
-                state_key = f"waiting_for_{alpha_id}"
+                # State key is already checked above; no separate key needed to prevent fighting
                 if last_log_state != state_key:
                     print(f"[Worker {args.id}] Master died. Waiting for {alpha_id} to promote.")
                     last_log_state = state_key
@@ -244,10 +245,9 @@ def main():
                 
                 except Exception as e:
                     error_msg = str(e).lower()
-                    if "peer closed" in error_msg or "incomplete chunked read" in error_msg or "remote disconnected" in error_msg:
-                        print(f"[Worker {args.id}] 🌐 Network Glitch: {e}. Retrying task...")
+                    if attempt < max_retries - 1 and ("-1" in error_msg or "429" in error_msg or "limit reached" in error_msg or "internal server error" in error_msg or "503" in error_msg or "peer closed" in error_msg or "incomplete chunked read" in error_msg):
+                        print(f"[Brain {args.id}] ⚠️ Usage Limit or Transient Error: {e}. Rotating key and retrying INSTANTLY (Rule #1)... ")
                         pass # NO SLEEP
-
                         continue
                     
                     print(f"[Worker {args.id}] 🛑 ERROR: {e}. Immediate retry...")
