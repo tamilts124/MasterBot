@@ -125,16 +125,16 @@ def main():
         is_stale = (last_seen > 0 and time.time() - last_seen > 10)
         
         if master_status.get("status") in ["died", "offline"] or is_stale:
+            # Election: Am I the alpha slave? (Calculated early to avoid NameError)
+            all_candidates = sorted([args.id] + coworkers)
+            alpha_id = all_candidates[0]
+            
             # IMMEDIATE PROMOTION - No wait
             # Use a combined state key so the two messages don't fight and cause spam
             state_key = f"promotion_{args.parent}_{is_stale}_{alpha_id}"
             if last_log_state != state_key:
                 print(f"[Worker {args.id}] ⚠️ MASTER {args.parent} FAILURE/SILENCE. Initiating Self-Promotion...")
                 last_log_state = state_key
-            
-            # Election: Am I the alpha slave?
-            all_candidates = sorted([args.id] + coworkers)
-            alpha_id = all_candidates[0]
             
             if args.id == alpha_id:
                 # Check if I'm the ONLY survivor
