@@ -157,7 +157,11 @@ class MasterAgent:
                 self.task_assignments = json.load(f)
             # Restore personal task
             self.master_task = self.task_assignments.get(self.config.id)
-            print(f"[Master {self.config.id}] Successfully restored {len(self.task_assignments)} active assignments.")
+            print(f"[Master {self.config.id}] Successfully restored {len(self.task_assignments)} active assignments. Waking up squad...")
+            # Re-notify slaves of their tasks so they can start immediately on the new VM
+            for sid, task in self.task_assignments.items():
+                if sid != self.config.id:
+                    self.bus.send_message(self.config.id, sid, task, msg_type="task_assignment")
         else:
             print(f"[Master {self.config.id}] 🏛️ COMMENCING NEW MISSION ARCHITECTURE...")
             sub_tasks = self.split_task(main_task)
