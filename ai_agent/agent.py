@@ -176,16 +176,29 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             try:
                 from .mas.communication import MessageBus
                 bus = MessageBus(work_dir / ".mas")
+                
+                # 1. Mandatory Inbox Priority
                 pending = bus.get_messages(os.environ.get("AGENT_ID", ""))
                 if pending:
                     senders = list(set([m['from'] for m in pending]))
-                    inbox_alert = f"\n\n[INBOX ALERT] You have {len(pending)} unread messages from: {', '.join(senders)}. You MUST use 'inspect_agent_communication' to read them immediately before continuing your work. This is mandatory MARS protocol."
+                    inbox_alert = f"\n\n[INBOX ALERT] You have {len(pending)} unread messages from: {', '.join(senders)}. You MUST use 'inspect_agent_communication' to read them immediately before continuing your work."
                     if isinstance(input_data, dict) and "input" in input_data:
                         input_data["input"] += inbox_alert
                     else:
                         input_data = str(input_data) + inbox_alert
+                
+                # 2. Proactive Knowledge Manifest
+                knowledge = bus.get_knowledge()
+                if knowledge:
+                    topics = ", ".join(knowledge.keys())
+                    k_alert = f"\n\n[SQUAD KNOWLEDGE] The vault contains insights on: {topics}. DO NOT re-analyze these. Use 'query_knowledge' to retrieve the understanding."
+                    if isinstance(input_data, dict) and "input" in input_data:
+                        input_data["input"] += k_alert
+                    else:
+                        input_data = str(input_data) + k_alert
+                        
             except Exception as e:
-                print(f"[Inbox Error] {e}")
+                print(f"[Context Error] {e}")
 
             actual_input = input_data["input"] if isinstance(input_data, dict) else input_data
 
