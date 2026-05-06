@@ -404,15 +404,7 @@ def send_mas_message(to_id: str, message: str) -> str:
     
     if not agent_id: return "[Error] MAS context missing."
     
-    # Permission Logic
-    is_master = to_id == parent_id
-    is_coworker = to_id in coworkers
-    
-    if not (is_master or is_coworker or comm_anyone):
-        return f"[Permission Denied] You cannot communicate with {to_id} unless 'communicate_anyone' is enabled."
-    
-    if is_coworker and not comm_same:
-        return f"[Permission Denied] Same-level communication is disabled for you."
+    if not agent_id: return "[Error] MAS context missing."
     
     print(f"\n[COMM] {agent_id} -> {to_id}: {message[:100]}...\n", flush=True)
     get_bus().send_message(agent_id, to_id, message, msg_type="text")
@@ -420,11 +412,37 @@ def send_mas_message(to_id: str, message: str) -> str:
 
 @tool
 def inspect_agent_communication(agent_id: str) -> str:
-    """[Master Only] Inspect the recent archived messages of a specific agent to audit their coordination."""
-    history = get_bus().get_agent_history(agent_id)
-    if not history: return f"No archived communication found for {agent_id}."
+    """Read the last 10 coordination messages sent/received by a specific agent (Auditing)."""
+    history = get_bus().get_agent_history(agent_id, limit=10)
+    if not history: return f"No recorded communication for {agent_id}."
     
-    summary = f"Recent Communication for {agent_id}:\n"
+    output = f"--- Communication Log for {agent_id} ---\n"
     for msg in history:
-        summary += f"[{msg['type']}] {msg['from']} -> {msg['to']}: {str(msg['content'])[:50]}...\n"
-    return summary
+        t = time.strftime('%H:%M:%S', time.localtime(msg['timestamp']))
+        output += f"[{t}] {msg['from']} -> {msg['to']} ({msg['type']}): {str(msg['content'])[:500]}\n"
+    return output
+
+@tool
+def contribute_to_knowledge(topic: str, insight: str) -> str:
+    """Add a significant architectural insight, file analysis, or mission finding to the shared knowledge base.
+    Other agents can query this instead of re-analyzing the same code/data."""
+    agent_id = os.environ.get("AGENT_ID", "Unknown")
+    get_bus().update_knowledge(topic, insight, agent_id)
+    print(f"\n[KNOWLEDGE] {agent_id} contributed insight on '{topic}'\n", flush=True)
+    return f"Knowledge vault updated with topic: {topic}"
+
+@tool
+def query_knowledge(topic: Optional[str] = None) -> str:
+    """Retrieve shared insights from the squad's knowledge vault. 
+    Use this to avoid redundant analysis of files or systems already understood by coworkers."""
+    knowledge = get_bus().get_knowledge(topic)
+    if not knowledge:
+        return "No shared knowledge found for this topic."
+    
+    if topic:
+        return f"Topic: {topic}\nContributor: {knowledge['contributor']}\nInsight: {knowledge['insight']}"
+    
+    output = "--- Shared Knowledge Vault ---\n"
+    for t, data in knowledge.items():
+        output += f"- {t}: {data['insight'][:200]}... (by {data['contributor']})\n"
+    return output

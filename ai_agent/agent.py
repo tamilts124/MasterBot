@@ -96,7 +96,8 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     tools.extend([
         rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
         report_to_master, ask_coworker, get_mas_identity, list_team_members, 
-        check_agent_status, send_mas_message, inspect_agent_communication
+        check_agent_status, send_mas_message, inspect_agent_communication,
+        contribute_to_knowledge, query_knowledge
     ])
 
     if whatsapp_jid:

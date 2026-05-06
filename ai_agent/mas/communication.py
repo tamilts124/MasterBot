@@ -75,3 +75,34 @@ class MessageBus:
                 if msg not in history: history.append(msg)
         
         return sorted(history, key=lambda x: x["timestamp"], reverse=True)[:limit]
+
+    def update_knowledge(self, topic: str, insight: str, agent_id: str):
+        path = self.base_dir / "shared_knowledge.json"
+        knowledge = {}
+        if path.exists():
+            try:
+                with open(path, "r") as f:
+                    knowledge = json.load(f)
+            except: pass
+        
+        knowledge[topic] = {
+            "insight": insight,
+            "contributor": agent_id,
+            "timestamp": time.time()
+        }
+        
+        temp_file = self.base_dir / "shared_knowledge.json.tmp"
+        with open(temp_file, "w") as f:
+            json.dump(knowledge, f)
+        temp_file.rename(path)
+
+    def get_knowledge(self, topic: Optional[str] = None) -> Dict[str, Any]:
+        path = self.base_dir / "shared_knowledge.json"
+        if not path.exists():
+            return {}
+        with open(path, "r") as f:
+            knowledge = json.load(f)
+        
+        if topic:
+            return knowledge.get(topic, {})
+        return knowledge
