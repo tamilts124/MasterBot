@@ -454,7 +454,10 @@ def query_knowledge(topic: Optional[str] = None) -> str:
         return "No shared knowledge found for this topic."
     
     if topic:
-        return f"Topic: {topic}\nContributor: {knowledge['contributor']}\nInsight: {knowledge['insight']}"
+        res = f"Topic: {topic}\nContributor: {knowledge['contributor']}\nInsight: {knowledge['insight']}"
+        if knowledge.get("is_stale"):
+            res += "\n\n⚠️ WARNING: This insight is STALE. The file has been modified since this was written. Please re-analyze the file and use 'contribute_to_knowledge' to update this vault."
+        return res
     
     output = "--- Shared Knowledge Vault ---\n"
     for t, data in knowledge.items():

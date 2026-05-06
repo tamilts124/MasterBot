@@ -85,10 +85,16 @@ class MessageBus:
                     knowledge = json.load(f)
             except: pass
         
+        # Check if it's a file to track modification time
+        file_mtime = 0
+        if os.path.exists(topic):
+            file_mtime = os.path.getmtime(topic)
+            
         knowledge[topic] = {
             "insight": insight,
             "contributor": agent_id,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "file_mtime": file_mtime
         }
         
         temp_file = self.base_dir / "shared_knowledge.json.tmp"
@@ -104,5 +110,10 @@ class MessageBus:
             knowledge = json.load(f)
         
         if topic:
-            return knowledge.get(topic, {})
+            data = knowledge.get(topic, {})
+            if data and data.get("file_mtime"):
+                # Check for staleness
+                if os.path.exists(topic) and os.path.getmtime(topic) > data["file_mtime"]:
+                    data["is_stale"] = True
+            return data
         return knowledge
