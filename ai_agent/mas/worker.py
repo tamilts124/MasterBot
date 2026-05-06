@@ -117,8 +117,6 @@ def main():
         if time.time() - last_cycle_time < 1:
             continue
         last_cycle_time = time.time()
-
-        last_cycle_time = time.time()
         
         # 1. Master Watchdog (With Stale Detection)
         master_status = bus.get_agent_status(args.parent)
@@ -245,9 +243,9 @@ def main():
                 
                 except Exception as e:
                     error_msg = str(e).lower()
-                    if attempt < max_retries - 1 and ("-1" in error_msg or "429" in error_msg or "limit reached" in error_msg or "internal server error" in error_msg or "503" in error_msg or "peer closed" in error_msg or "incomplete chunked read" in error_msg):
+                    # Fixed: Removed undefined 'attempt' check.
+                    if "-1" in error_msg or "429" in error_msg or "limit reached" in error_msg or "internal server error" in error_msg or "503" in error_msg or "peer closed" in error_msg or "incomplete chunked read" in error_msg:
                         print(f"[Brain {args.id}] ⚠️ Usage Limit or Transient Error: {e}. Rotating key and retrying INSTANTLY (Rule #1)... ")
-                        pass # NO SLEEP
                         continue
                     
                     print(f"[Worker {args.id}] 🛑 ERROR: {e}. Immediate retry...")
