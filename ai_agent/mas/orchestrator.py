@@ -227,21 +227,23 @@ class MasterAgent:
                         task_to_resume = self.task_assignments.pop(msg["from"], None)
                         self.handle_slave_failure(msg["from"], task_to_resume)
                 
-                # Use the brain for analysis and coding with the Global Manifest as context
+                # PASSIVE MONITORING MODE: Forbid the Master from re-architecting
                 manifest = self.task_assignments
                 prompt = (
-                    f"MISSION CONTEXT:\n- Current Active Assignments: {json.dumps(manifest, indent=2)}\n"
-                    f"- New Incoming Reports: {json.dumps(new_reports, indent=2)}\n\n"
-                    "INSTRUCTIONS:\n"
-                    "1. Analyze the reports and update the status of those specific slaves.\n"
-                    "2. Do NOT re-issue or re-architect tasks that are already in the 'Active Assignments' list.\n"
-                    "3. If a task is complete, acknowledge it. If a slave is stuck, give them a NEW, non-redundant objective.\n"
+                    f"PASSIVE MONITORING MODE ACTIVE:\n"
+                    f"- Active Assignments: {json.dumps(manifest, indent=2)}\n"
+                    f"- New Reports: {json.dumps(new_reports, indent=2)}\n\n"
+                    "RULES:\n"
+                    "1. CHECK ASSIGNMENTS: Compare the list of team members with the 'Active Assignments'. If a slave is NOT in the active manifest, you MUST assign them a modular task using 'send_mas_message'.\n"
+                    "2. NO REDUNDANCY: You are FORBIDDEN from re-assigning or messaging slaves who are already in the 'Active Assignments' list with the same task.\n"
+                    "3. If a slave is DONE or FAILED, remove them from the manifest and assign a NEW objective.\n"
+                    "4. Do NOT re-analyze the project structure unless a major blocker occurs. Focus on keeping all slaves productive."
                 )
                 if self.master_task:
                     prompt += f"\nALSO, continue your personal task: {self.master_task}. Use tools to write code."
                 
                 result = self.master_agent.invoke({"input": prompt})
-                print(f"[Master {self.config.id}] Status Update complete.")
+                print(f"[Master {self.config.id}] Monitoring cycle complete.")
             
             # Periodically work on personal task even if no reports (every 10 minutes to avoid spam)
             elif self.master_task and (time.time() - getattr(self, 'last_personal_work', 0) > 600):
