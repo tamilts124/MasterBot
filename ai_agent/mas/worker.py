@@ -26,7 +26,7 @@ def main():
     if proxy_url:
         print(f"[Worker {args.id}] 🛡️ PROXY ACTIVE: {proxy_url}")
 
-    comm_dir = Path("..").absolute() / ".mas"
+    comm_dir = Path(".mas").absolute()
     bus = MessageBus(comm_dir)
     
     # PROOF OF LIFE: Announce presence to Master
