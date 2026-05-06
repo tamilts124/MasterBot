@@ -99,9 +99,12 @@ class MasterAgent:
             num_tasks += 1
             
         prompt = f"""
-        You are the Root Master. Split this goal into exactly {num_tasks} distinct, modular sub-tasks.
-        Assign tasks to slaves listed below. 
-        {"If you have an extra task, assign it to yourself (root_master)." if self.config.can_coding else ""}
+        MANDATORY PROTOCOL: You are the Root Master. You must architect a strategy and STOP once tasks are assigned.
+        1. Analyze core files ONLY if absolutely necessary.
+        2. Write your high-level summary to 'project_analysis.md' and IMMEDIATELY STOP.
+        3. Split this goal into exactly {num_tasks} distinct, modular sub-tasks.
+        Assign tasks to slaves listed below.
+        {"(If necessary, assign a task to yourself: root_master)" if self.config.can_coding else ""}
         
         GOAL: {task_description}
         SLAVES: {[s.id for s in self.config.slaves]}
@@ -224,7 +227,7 @@ class MasterAgent:
             elif self.master_task and (time.time() - getattr(self, 'last_personal_work', 0) > 600):
                 self.last_personal_work = time.time()
                 print(f"[Master {self.config.id}] 🛠️ Working on personal task...")
-                result = self.master_agent.invoke({"input": f"Continue working on your personal task: {self.master_task}. Write code and improve the project."})
+                result = self.master_agent.invoke({"input": f"Continue working on your personal task: {self.master_task}. Keep improving the code based on the project analysis."})
                 print(f"[Master {self.config.id}] Task progress: {extract_reply(result)[:100]}...")
 
             # Prevent CPU/API spam with a loop sleep
