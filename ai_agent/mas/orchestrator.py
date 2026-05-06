@@ -70,15 +70,8 @@ class MasterAgent:
         """Use the Master's LLM to split the task into sub-tasks."""
         print(f"[Master {self.config.id}] 🏛️ CALCULATING MISSION ARCHITECTURE...")
         
-        # Full agent for monitoring and architecture
-        self.master_agent = build_agent(
-            work_dir=self.workspace,
-            agent_id=self.config.id,
-            model=self.config.model,
-            api_url=self.config.api_url,
-            api_key=self.config.api_key,
-            parent_id="USER"
-        )
+        # Ensure brain is ready
+        self._ensure_brain()
         
         manifest = self.task_assignments
         prompt = (
@@ -108,7 +101,20 @@ class MasterAgent:
             print(f"[Master {self.config.id}] ⚠️ ARCHITECTURE FATAL ERROR: {e}")
             raise e
 
+    def _ensure_brain(self):
+        """Ensure the Master's AI brain is initialized."""
+        if not hasattr(self, 'master_agent') or self.master_agent is None:
+            self.master_agent = build_agent(
+                work_dir=self.workspace,
+                agent_id=self.config.id,
+                model=self.config.model,
+                api_url=self.config.api_url,
+                api_key=self.config.api_key,
+                parent_id="USER"
+            )
+
     def run_cycle(self, main_task: str):
+        self._ensure_brain()
         self.start_time = time.time()
         self.wipeout_limit = 6 * 3600 # 6 hours
         self.emergency_threshold = 5.5 * 3600 # 5.5 hours
