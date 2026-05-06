@@ -161,7 +161,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "7. ASK WHEN IN DOUBT: If you have any doubt, ask the Master or a coworker immediately.\n"
             "8. MONITOR: Use 'check_agent_status' and 'inspect_agent_communication' to align your work.\n"
             "9. REPORT: You MUST report to the Master ('report_to_master') after every significant milestone.\n"
-            "10. NO LOOPS: If you repeat an action twice without success, STOP and ask for guidance.\n"
+            "10. NO LOOPS: If you repeat an action twice without success, or if you repeat a SUCCESSFUL report twice, STOP and wait for new instructions. Do NOT spam the Master with duplicate reports.\n"
             "11. INBOX PRIORITY: If you see an [INBOX ALERT] in your instructions, you are FORBIDDEN from performing any other task until you have used 'inspect_agent_communication' to read the pending messages. Coordination is your highest priority."
         )
     )

@@ -352,7 +352,7 @@ def report_to_master(summary: str, task_id: str) -> str:
     
     print(f"\n[REPORT] {agent_id} -> Master {parent_id}: {summary[:100]}...\n", flush=True)
     get_bus().send_message(agent_id, parent_id, {"summary": summary, "task_id": task_id}, msg_type="task_report")
-    return f"Report sent to Master {parent_id}"
+    return f"[SUCCESS] Report for task '{task_id}' has been delivered to Master {parent_id}. This task is now officially REPORTED. Do NOT repeat this report."
 
 @tool
 def ask_coworker(coworker_id: str, question: str) -> str:
