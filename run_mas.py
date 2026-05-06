@@ -67,6 +67,7 @@ def main():
             print(f"📥 Initializing and fetching target repository: {args.repo_url}")
             # Instead of 'git clone .' which fails on non-empty dirs, we init and fetch
             run_command(["git", "init"], cwd=root_dir, label="Init Git")
+            run_command(["git", "branch", "-M", "main"], cwd=root_dir)
             run_command(["git", "remote", "add", "origin", authenticated_url], cwd=root_dir, label="Adding Remote")
             
             fetch_res = run_command(["git", "fetch", "origin"], cwd=root_dir, label="Fetching Data")
@@ -203,10 +204,8 @@ def main():
             if status_res.stdout.strip():
                 print("🚀 Changes detected. Pushing to remote...")
                 run_command(["git", "commit", "-m", f"MARS: Mission Sync ({config.id})"], cwd=root_dir, label="Final Commit")
-                # Get current branch
-                branch_res = run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=root_dir)
-                branch = branch_res.stdout.strip() or "main"
-                run_command(["git", "push", "origin", branch], cwd=root_dir, label="Final Push")
+                # Force push to main
+                run_command(["git", "push", "origin", "HEAD:main"], cwd=root_dir, label="Final Push")
             else:
                 print("✅ No changes to push. Workspace is clean.")
 
