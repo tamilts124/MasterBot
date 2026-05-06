@@ -61,6 +61,18 @@ def main():
         for c in coworkers:
             bus.send_message(args.id, c, f"Coworker {args.id} is down. Error: {error_msg}", msg_type="coworker_down")
 
+    def handle_emergency(msg_type: str, reason: str = "Unknown"):
+        """Panic-Commit and Exit."""
+        print(f"[Worker {args.id}] 🚨 EMERGENCY SHUTDOWN: {reason}. Pushing changes...")
+        try:
+            subprocess.run(["git", "add", "."], check=True)
+            subprocess.run(["git", "commit", "-m", f"Emergency Save ({args.id}): {reason}"], check=True)
+            subprocess.run(["git", "push", "origin", "main"], check=True)
+            print(f"[Worker {args.id}] ✅ Panic-Commit successful. Goodbye.")
+        except:
+            print(f"[Worker {args.id}] ⚠️ Panic-Commit failed. Exiting anyway.")
+        sys.exit(0)
+
     def become_master(bus, coworkers):
         """Transformation logic for a Slave to become a Master."""
         print(f"[Worker {args.id}] 👑 TRANSFORMING INTO ROOT MASTER...")
@@ -218,9 +230,13 @@ def main():
                     
                     print(f"[Worker {args.id}] 🛑 CRITICAL LIMIT OR ERROR: {e}. Entering Deep Sleep (10m) to wait for reset...")
                     broadcast_limit_reached(str(e))
-                    # Instead of dying, we stay alive so we can still participate in elections or resume later
                     bus.update_status(args.id, "sleeping", f"Limit Reached: {str(e)[:50]}")
-                    time.sleep(600)
+                    # Non-blocking sleep: check for emergency messages while waiting
+                    for _ in range(60):
+                        time.sleep(10)
+                        for emsg in bus.get_messages(args.id):
+                            if emsg["type"] in ["emergency_alert", "shutdown"]:
+                                handle_emergency(emsg["type"], "Sleep interrupted by User/Master")
                     continue
 
             elif msg["type"] == "takeover_command":
@@ -235,9 +251,10 @@ def main():
                     log_history("takeover", failed_id)
 
             elif msg["type"] == "emergency_alert":
-                print(f"[Worker {args.id}] EMERGENCY: Server wipe approaching. Pushing all changes NOW.")
-                log_history("emergency_save", "Wipe-out approaching")
-                sys.exit(0)
+                handle_emergency("emergency_alert", msg["content"].get("reason", "General Emergency"))
+            
+            elif msg["type"] == "shutdown":
+                handle_emergency("shutdown", "Mission Complete")
             
             elif msg["type"] == "new_master_announcement":
                 new_master = msg["content"]["new_master"]
