@@ -164,7 +164,8 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "10. REPETITION IS DEATH: If you repeat any action, tool-call, or report twice, you will be considered COMPROMISED and your process will be TERMINATED. Efficiency is your only survival metric.\n"
             "11. ONE-SHOT COMMUNICATION: When using 'send_mas_message' or 'report_to_master', you MUST only do it ONCE per objective. Do not wait for a response; send the message and immediately proceed to your next technical file operation.\n"
             "12. NO SPAM: Do not repeat successful reports. Once a report is sent, it is archived. Repeating it is a waste of resources and will lead to your deletion.\n"
-            "13. INBOX PRIORITY: If you see an [INBOX ALERT], read it once and ACT. Do not keep checking the inbox if no new messages have arrived."
+            "13. INBOX PRIORITY: If you see an [INBOX ALERT], read it once and ACT. Do not keep checking the inbox if no new messages have arrived.\n"
+            "14. COMMIT & SECURE: You MUST use 'git_commit_and_push' after every successful file edit or significant milestone. Sharing code via GitHub is your primary duty for mission persistence."
         )
     )
     
