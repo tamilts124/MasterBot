@@ -1,7 +1,11 @@
 import sys, os
 import argparse
+import warnings
 from pathlib import Path
 from typing import List, Union
+
+# Suppress noisy LangChain/LangGraph deprecation warnings
+warnings.filterwarnings("ignore", message=".*allowed_objects.*will change.*")
 
 from langchain_core.messages import HumanMessage, AIMessage
 

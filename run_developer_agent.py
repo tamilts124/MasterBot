@@ -4,7 +4,12 @@ import subprocess
 import argparse
 import shutil
 import time
+import warnings
+import socket
 from pathlib import Path
+
+# Suppress noisy LangChain/LangGraph deprecation warnings
+warnings.filterwarnings("ignore", message=".*allowed_objects.*will change.*")
 
 def run_command(cmd, cwd=None, env=None, label=None):
     """Run a shell command with real-time output while capturing for results."""
@@ -25,7 +30,7 @@ def run_command(cmd, cwd=None, env=None, label=None):
     
     full_output = []
     for line in process.stdout:
-        print(line, end='') # Real-time print to console
+        print(line, end='', flush=True) # Real-time print to console
         full_output.append(line)
     
     process.wait()
@@ -38,6 +43,23 @@ def run_command(cmd, cwd=None, env=None, label=None):
             self.stderr = "" # Already merged into stdout
             
     return Result(process.returncode, "".join(full_output))
+
+def rotate_tor_ip():
+    """Request a new Tor circuit (NEWNYM) via the control port."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(5)
+            s.connect(("127.0.0.1", 9051))
+            s.sendall(b'AUTHENTICATE ""\r\n')
+            # Wait for response
+            s.recv(1024)
+            s.sendall(b'SIGNAL NEWNYM\r\n')
+            s.recv(1024)
+            s.sendall(b'QUIT\r\n')
+        print("Action: Requesting new Tor IP (NEWNYM)")
+        time.sleep(10) # Give Tor a moment to establish a new circuit
+    except Exception as e:
+        print(f"Warning: Failed to rotate Tor IP: {e}")
 
 def main():
     parser = argparse.ArgumentParser(description="AI Developer Agent with key cycling.")
@@ -97,10 +119,19 @@ def main():
     run_command(["git", "config", "user.email", git_email], cwd=workspace, label="Configuring Git Email")
 
     key_index = 0
-    while key_index < len(keys):
+    while True:
+        if key_index >= len(keys):
+            print(f"\n[INFO] All {len(keys)} keys processed. Waiting 15 minutes before restarting cycle...")
+            time.sleep(900) # 15 minutes cool-down
+            key_index = 0
+            continue
+
         current_key = keys[key_index]
         print(f"\n--- Attempting with Ollama API Key {key_index + 1}/{len(keys)} ---")
         
+        # Rotate Tor IP before each key rotation or cycle
+        rotate_tor_ip()
+
         # Prepare command to run the agent
         agent_cmd = [
             sys.executable, "-m", "ai_agent.main",
@@ -117,35 +148,52 @@ def main():
         if args.whatsapp:
             agent_cmd.extend(["--whatsapp", args.whatsapp, "--whatsapp-url", args.whatsapp_url])
 
-        # Run the agent
-        agent_res = run_command(agent_cmd, label="Starting AI Agent Session")
-        
-        if agent_res.returncode != 0:
-            # Check for limit/expiry errors in output
+        # Retry logic for specific errors
+        max_retries = 3
+        attempt = 0
+        while attempt < max_retries:
+            if attempt > 0:
+                print(f"Retry attempt {attempt}/{max_retries}...")
+                rotate_tor_ip() # Try a new IP on retry
+
+            agent_res = run_command(agent_cmd, label="Starting AI Agent Session")
+            
+            if agent_res.returncode == 0:
+                # Task completed successfully - keep the loop going with the same key
+                print("\n--- Session finished. Starting next development cycle in 5 seconds... ---")
+                time.sleep(5)
+                attempt = 0 # Reset retries for next cycle
+                continue # Run again with the same key
+
+            # Non-zero return code
             error_output = (agent_res.stdout + agent_res.stderr).lower()
+            
+            # Specific retry condition
+            if "server disconnected without sending a response" in error_output:
+                print("Detected 'Server disconnected' error. Retrying with new Tor IP...")
+                attempt += 1
+                time.sleep(5 * attempt) # Incremental wait
+                continue
+            
+            # If it's a limit or any other error, rotate key
             is_limit = any(term in error_output for term in ["limit", "expiry", "429", "401", "unauthorized", "quota", "503", "overloaded"])
             
-            if is_limit:
-                # Only auto-push if it was a limit exhaustion
-                status_res = run_command(["git", "status", "--porcelain"], cwd=workspace, label="Checking for changes")
-                if status_res.stdout.strip():
-                    print("\nLimit reached. Saving progress to GitHub...")
-                    run_command(["git", "add", "."], cwd=workspace, label="Staging changes")
-                    commit_msg = f"AI Developer: Progress saved (Key {key_index + 1} exhausted/interrupted)"
-                    run_command(["git", "commit", "-m", commit_msg], cwd=workspace, label="Committing changes")
-                    # We use -u origin main to ensure it always finds the destination
-                    run_command(["git", "push", "-u", "origin", "main"], cwd=workspace, label="Emergency Push to GitHub")
+            # Save progress on any rotation-worthy error
+            status_res = run_command(["git", "status", "--porcelain"], cwd=workspace, label="Checking for changes")
+            if status_res.stdout.strip():
+                print("\nSaving progress before key rotation...")
+                run_command(["git", "add", "."], cwd=workspace, label="Staging changes")
+                commit_msg = f"AI Developer: Progress saved (Key {key_index + 1} interrupted/rotated)"
+                run_command(["git", "commit", "-m", commit_msg], cwd=workspace, label="Committing changes")
+                run_command(["git", "push", "-u", "origin", "main"], cwd=workspace, label="Emergency Push to GitHub")
 
-                print(f"Key {key_index + 1} appears to be exhausted or invalid. Rotating and continuing...")
-                key_index += 1
+            if is_limit:
+                print(f"Key {key_index + 1} appears to be exhausted. Rotating...")
             else:
-                print("Agent failed with an unexpected error. Rotating to try next key...")
-                key_index += 1
-        else:
-            # Task completed successfully - keep the loop going with the same key
-            print("\n--- Session finished. Starting next development cycle in 5 seconds... ---")
-            time.sleep(5)
-            continue
+                print(f"Agent failed with an unexpected error. Rotating key...")
+            
+            key_index += 1
+            break # Exit retry loop to move to next key
 
     print("\n[CRITICAL] All sessions of Ollama limit excited. No valid keys left.")
     sys.exit(1)

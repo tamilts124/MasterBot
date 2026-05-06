@@ -1,44 +1,50 @@
-# 🤖 WhatsApp AI Agent Automation
+# 🤖 WhatsApp AI Agent Automation (Hardened)
 
-![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/tamilts124/AI_CLI/whatsapp_agent.yml?style=for-the-badge)
+![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/tamilts124/AI_CLI/developer_agent.yml?style=for-the-badge)
 ![Python Version](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)
 ![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=for-the-badge&logo=docker)
+![Tor](https://img.shields.io/badge/Tor-Integrated-7D4698?style=for-the-badge&logo=torproject)
 
-A premium, automated solution for running a ReAct AI agent on WhatsApp. This project leverages **Docker**, **GitHub Actions**, and **Ollama** to provide a seamless, scheduled AI interaction experience.
+A premium, hardened autonomous developer agent system. This project leverages **Docker**, **GitHub Actions**, **Tor Network**, and **Ollama** to provide a resilient, 24/7 automated development experience with multi-key support and IP rotation.
 
 ## 🌟 Key Features
 
--   **Automated Deployment**: GitHub Actions triggers daily at 5:00 AM IST (23:30 UTC) and 10:00 PM UTC.
--   **Encrypted Session Recovery**: Securely unzips WhatsApp session data using 7z with AES-256 encryption.
--   **Dockerized API**: Runs the [WhatsApp API](https://github.com/tamilts124/WhatsApp_API) in a lightweight container for maximum stability.
--   **Advanced AI Agent**: Powered by `gemma4:31b-cloud` via Ollama for intelligent tool usage and reasoning.
+-   **Tor IP Rotation**: All API requests are routed through the **Tor Network** (SOCKS5 proxy). The agent automatically requests a new Tor circuit (`NEWNYM`) on retries and rotations to bypass connection drops and IP rate limits.
+-   **Hardened Execution Loop**: 
+    -   **Selective Retries**: Intelligent retry logic for transient "Server disconnected" errors.
+    -   **Multi-Key Cycling**: Automatically rotates through a list of Ollama API keys when limits are reached.
+    -   **Global Wait Cycle**: If all keys are exhausted, the agent enters a 15-minute "cool-down" before restarting the cycle, ensuring continuous progress.
+-   **Automated Deployment**: GitHub Actions triggers on schedule or manual dispatch.
+-   **Emergency Progress Save**: Automatically stages, commits, and pushes changes to GitHub whenever a session is interrupted or a key is rotated.
+-   **Dockerized API**: Runs the [WhatsApp API](https://github.com/tamilts124/WhatsApp_API) in a stable container for communication.
 
 ## 🛠 Architecture
 
-1.  **Workflow Trigger**: Scheduled via CRON or manual trigger.
-2.  **Environment Setup**: Ubuntu-latest runner with Docker and Python 3.10.
-3.  **Authentication**: Securely restores `auth_info` session data.
-4.  **Service Startup**: WhatsApp API container initializes on port 3000.
-5.  **Agent Execution**: Python agent processes the prompt and communicates with WhatsApp/Ollama.
+1.  **Workflow Trigger**: Scheduled via CRON or manual dispatch.
+2.  **Network Shield**: **Tor Service** initializes with Control Port access for IP rotation.
+3.  **Environment Setup**: Ubuntu-latest runner with Docker, Python 3.10, and Tor.
+4.  **Authentication**: Securely restores `auth_info` WhatsApp session data.
+5.  **Service Startup**: WhatsApp API container initializes on port 3000.
+6.  **Hardened Agent**: Python developer agent executes with the **Master Architect Prompt**, cycling keys and IPs as needed.
 
-## 🔐 Required Secrets
+## 🔐 Required Secrets & Variables
 
-To run this workflow, configure the following secrets in your GitHub repository:
-
-| Secret | Description |
-| :--- | :--- |
-| `AUTH_INFO_PASSWORD` | Password for the `auth_info.7z` encrypted file. |
-| `OLLAMA_API_URL` | Base URL for Ollama API (e.g., `https://ollama.com`). |
-| `OLLAMA_API_KEY` | API Key for your Ollama endpoint. |
-| `AGENT_PROMPT` | The primary instruction or query for the agent. |
-| `WHATSAPP_NUMBER` | The target WhatsApp ID/Number (e.g., `1234567890@c.us`). |
+| Name | Type | Description |
+| :--- | :--- | :--- |
+| `OLLAMA_API_KEYS` | Secret | Comma-separated list of Ollama API keys for rotation. |
+| `TARGET_REPO_TOKEN` | Secret | GitHub PAT for pushing changes to the target repository. |
+| `AUTH_INFO_PASSWORD` | Secret | Password for the `auth_info.7z` encrypted file. |
+| `WHATSAPP_NUMBER1` | Secret | Primary WhatsApp number for SOS communication. |
+| `DEVELOPER_PROMPT` | Variable | The "Master Architect" instructions for the developer agent. |
+| `TARGET_REPO_URL` | Variable | The URL of the repository the agent is developing. |
+| `DEVELOPER_MODEL` | Variable | The Ollama model to use (e.g., `qwen3-coder:480b-cloud`). |
 
 ## 🚀 Getting Started
 
 1.  Clone the repository.
-2.  Ensure `auth_info.7z` is present in the root directory.
-3.  Add the required secrets to your GitHub repository settings.
-4.  The workflow will run automatically on schedule, or you can trigger it manually from the **Actions** tab.
+2.  Ensure `auth_info.7z` is present in the root directory for WhatsApp connectivity.
+3.  Configure the Secrets and Variables in your GitHub repository settings.
+4.  Trigger the **AI Developer Agent** workflow from the **Actions** tab.
 
 ---
 

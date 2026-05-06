@@ -27,8 +27,21 @@ jobs:
           # Ensure auth_info directory exists
           mkdir -p auth_info
 
-      - name: Install 7-Zip
-        run: sudo apt-get update && sudo apt-get install -y p7zip-full
+      - name: Install 7-Zip and Tor
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y p7zip-full tor netcat-openbsd
+          # Configure Tor Control Port
+          sudo bash -c 'cat >> /etc/tor/torrc <<EOF
+          ControlPort 9051
+          CookieAuthentication 0
+          EOF'
+          sudo service tor restart
+          # Wait for Tor to initialize
+          sleep 10
+          # Verify Tor is running and reachable
+          echo "Current IP via Tor:"
+          curl --socks5-hostname 127.0.0.1:9050 https://api.ipify.org || echo "Tor not ready yet"
 
       - name: Decrypt and Extract Session Data
         run: |
@@ -65,6 +78,12 @@ jobs:
           PROMPT: "${{ github.event.inputs.prompt }} ${{ vars.DEVELOPER_PROMPT }}"
           TARGET_REPO: ${{ vars.TARGET_REPO_URL }}
           MODEL: ${{ vars.DEVELOPER_MODEL }}
+          # Real-time logging
+          PYTHONUNBUFFERED: "1"
+          # Tor Proxy configuration
+          HTTP_PROXY: "socks5h://127.0.0.1:9050"
+          HTTPS_PROXY: "socks5h://127.0.0.1:9050"
+          ALL_PROXY: "socks5h://127.0.0.1:9050"
         run: |
           python run_developer_agent.py \
             --prompt "$PROMPT" \
