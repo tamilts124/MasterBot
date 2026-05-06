@@ -114,8 +114,10 @@ def main():
     last_log_state = None
     while True:
         # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
-        if time.time() - last_cycle_time < 2:
+        if time.time() - last_cycle_time < 1:
             continue
+        last_cycle_time = time.time()
+
         last_cycle_time = time.time()
         
         # 1. Master Watchdog (With Stale Detection)
@@ -189,9 +191,13 @@ def main():
                     import threading
                     stop_heartbeat = threading.Event()
                     def heartbeat_worker():
+                        last_hb = 0
                         while not stop_heartbeat.is_set():
+                            # ACCOUNT PROTECTION: 1s is the minimum to avoid GitHub blocking you for I/O abuse
+                            if time.time() - last_hb < 1:
+                                continue
+                            last_hb = time.time()
                             bus.update_status(args.id, "working", task)
-                            pass # NO SLEEP
 
                     
                     hb_thread = threading.Thread(target=heartbeat_worker, daemon=True)

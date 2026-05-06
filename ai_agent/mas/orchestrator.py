@@ -135,7 +135,9 @@ class MasterAgent:
         active_slaves = set()
         v_start = time.time()
         # Wait up to 60 seconds for roll-call to allow for Tor proxy latency
-        while len(active_slaves) < len(self.slave_processes) and (time.time() - v_start) < 60:
+        while len(active_slaves) < len(self.slave_processes):
+            # NO WAIT - NO TIMEOUT
+
             # We check ALL pending messages
             messages = self.bus.get_messages(self.config.id)
             for msg in messages:
@@ -183,8 +185,9 @@ class MasterAgent:
         last_cycle_time = 0
         while True:
             # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
-            if time.time() - last_cycle_time < 2:
+            if time.time() - last_cycle_time < 1:
                 continue
+            last_cycle_time = time.time()
             last_cycle_time = time.time()
             
             # Check for timeout (with 10-minute safety buffer for false alarms)

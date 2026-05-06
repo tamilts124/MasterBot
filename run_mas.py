@@ -239,7 +239,12 @@ def main():
         if 'root_master' in locals() and getattr(root_master, 'abdicated', False):
             print("[System] 👑 Succession in progress. Keeping mission alive for the new leader...")
             slave_procs = getattr(root_master, 'slave_procs', [])
+            last_sync_check = 0
             while any(p.poll() is None for p in slave_procs):
+                # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
+                if time.time() - last_sync_check < 1:
+                    continue
+                last_sync_check = time.time()
                 # Mission Completion Check
                 manifest_path = root_dir / ".mas" / "global_task_manifest.json"
                 if manifest_path.exists():
