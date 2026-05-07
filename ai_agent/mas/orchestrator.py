@@ -19,6 +19,7 @@ class MasterAgent:
         self.slave_processes: Dict[str, subprocess.Popen] = {}
         self.task_assignments: Dict[str, str] = {} # slave_id -> task_description
         self.reassignment_counts: Dict[str, int] = {} # task_description -> count
+        self.abdicated = False
 
     def discover_slaves(self):
         """Used by promoted Masters to find existing slave processes without re-launching them."""
@@ -245,6 +246,10 @@ class MasterAgent:
                         print(f"[Master {self.config.id}] Slave {msg['from']} DIED. Reason: {error_reason}")
                         task_to_resume = self.task_assignments.pop(msg["from"], None)
                         self.handle_slave_failure(msg["from"], task_to_resume)
+                    elif msg["type"] == "duplicate_task_report":
+                        content = msg.get("content", {})
+                        print(f"[Master {self.config.id}] ⚠️ DUPLICATE TASK ALERT from {msg['from']}: Task already held by {content.get('already_assigned_to')}")
+                        # Master can decide to re-architect or ignore
                 
                 # PASSIVE MONITORING MODE: Forbid the Master from re-architecting
                 manifest = self.task_assignments

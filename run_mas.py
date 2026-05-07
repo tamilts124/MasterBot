@@ -238,23 +238,45 @@ def main():
         # so the promoted slave can finish the mission.
         if 'root_master' in locals() and getattr(root_master, 'abdicated', False):
             print("[System] 👑 Succession in progress. Keeping mission alive for the new leader...")
-            slave_procs = getattr(root_master, 'slave_procs', [])
+            
+            # Use the correct attribute name from MasterAgent
+            slave_procs_dict = getattr(root_master, 'slave_processes', {})
+            slave_procs = [p for p in slave_procs_dict.values() if p is not None]
+            
             last_sync_check = 0
-            while any(p.poll() is None for p in slave_procs):
+            while True:
                 # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
-                if time.time() - last_sync_check < 1:
+                if time.time() - last_sync_check < 2: # Throttle a bit for stability
                     continue
                 last_sync_check = time.time()
-                # Mission Completion Check
+                
+                # Check if any subprocesses are still alive
+                alive_procs = [p for p in slave_procs if p.poll() is None]
+                
+                # Mission Completion Check via MessageBus/Shared State
                 manifest_path = root_dir / ".mas" / "global_task_manifest.json"
+                is_mission_done = False
                 if manifest_path.exists():
                     try:
                         with open(manifest_path, "r") as f:
                             m = json.load(f)
-                        if m and all(t.get("status") == "completed" for t in m.values()):
-                            print("[System] Successor has COMPLETED the mission. Shutting down.")
-                            break
-                    except: pass
+                        # Check if all agents (including the new master) are completed
+                        # We look at the status files for each agent
+                        all_done = True
+                        for aid in m.keys():
+                            status = bus.get_agent_status(aid)
+                            if status.get("status") not in ["completed", "died"]:
+                                all_done = False
+                                break
+                        if all_done:
+                            print("[System] 🏁 MISSION SUCCESSFUL: Successor has completed the mission.")
+                            is_mission_done = True
+                    except Exception as e:
+                        print(f"[Watchdog] Error checking mission status: {e}")
+                
+                if is_mission_done or not alive_procs:
+                    print("[System] All active processes finished or mission complete. Shutting down.")
+                    break
 
 if __name__ == "__main__":
     main()

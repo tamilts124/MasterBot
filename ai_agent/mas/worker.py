@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, List, Dict, Optional
 from .communication import MessageBus
@@ -160,6 +161,7 @@ def main():
                                 # Sequential Execution...
                     
                     print(f"[Worker {args.id}] All workloads finished. Performing FINAL PUSH.")
+                    bus.update_status(args.id, "completed")
                     sys.exit(0)
                 else:
                     print(f"[Worker {args.id}] MASTER {args.parent} DIED. I am the Alpha Slave. Promoting to Master...")
@@ -175,9 +177,37 @@ def main():
         messages = bus.get_messages(args.id)
         for msg in messages:
             if msg["type"] == "task_assignment":
-                task = msg["content"]
+                task_data = msg["content"]
+                task = task_data["task"] if isinstance(task_data, dict) else str(task_data)
                 task_id = f"task_{int(time.time())}"
-                print(f"[Worker {args.id}] Received task: {task}")
+                
+                # DUPLICATE TASK DETECTION
+                is_duplicate = False
+                duplicate_owner = None
+                manifest_path = comm_dir / "global_task_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r") as f:
+                            manifest = json.load(f)
+                        for aid, assigned_task in manifest.items():
+                            if aid != args.id: # Check others
+                                existing_content = assigned_task["task"] if isinstance(assigned_task, dict) else str(assigned_task)
+                                if task.strip() == existing_content.strip():
+                                    is_duplicate = True
+                                    duplicate_owner = aid
+                                    break
+                    except: pass
+
+                if is_duplicate:
+                    print(f"[Worker {args.id}] ⚠️ DUPLICATE TASK DETECTED: Already assigned to {duplicate_owner}. Alerting Master...")
+                    bus.send_message(args.id, args.parent, {
+                        "error": "duplicate_task",
+                        "task": task,
+                        "already_assigned_to": duplicate_owner
+                    }, msg_type="duplicate_task_report")
+                    continue
+
+                print(f"[Worker {args.id}] Received task: {task[:50]}...")
                 
                 # 1. INSTANT ACK: Tell Master immediately that we've started to prevent re-assignment loops
                 bus.send_message(args.id, args.parent, {"task_id": task_id, "status": "acknowledged"}, msg_type="task_ack")
