@@ -118,9 +118,12 @@ class MasterAgent:
                 sub_tasks = json.loads(json_match.group(0))
                 print(f"[Master {self.config.id}] 📋 STRATEGY ARCHITECTED. Preparing for deployment.")
                 return sub_tasks
+            
+            print(f"[Master {self.config.id}] ⚠️ ARCHITECTURE WARNING: No valid task JSON found in brain reply. Retrying...")
+            return []
         except Exception as e:
             print(f"[Master {self.config.id}] ⚠️ ARCHITECTURE FATAL ERROR: {e}")
-            raise e
+            return [] # Return empty instead of raising to allow the cycle to retry or wait
 
     def _ensure_brain(self):
         """Ensure the Master's AI brain is initialized."""

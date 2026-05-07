@@ -197,6 +197,7 @@ def main():
     # 6. Persistent Mission Host (Main Thread)
     current_config = config
     mission_prompt = MasterAgent.get_leader_directive(args.prompt)
+    dead_agents = set()
     
     while True:
         root_master = MasterAgent(current_config, bus, tor, root_dir)
@@ -214,9 +215,29 @@ def main():
             break # Mission finished successfully
         except Exception as e:
             print(f"[Master {current_config.id}] FATAL BRAIN ERROR: {e}")
-            if current_config.slaves:
-                next_leader_id = current_config.slaves[0].id
-                print(f"[Critical] {current_config.id} is abdicating. PROMOTING {next_leader_id}...")
+            dead_agents.add(current_config.id)
+            
+            # GLOBAL SUCCESSION LOGIC
+            def get_all_agents(cfg):
+                agents = [cfg]
+                for s in cfg.slaves:
+                    agents.extend(get_all_agents(s))
+                return agents
+
+            all_squad = get_all_agents(config)
+            living_candidates = [a for a in all_squad if a.id not in dead_agents]
+            
+            if living_candidates:
+                # Find the next candidate (BFS/Level-order priority)
+                next_leader_cfg = living_candidates[0]
+                next_leader_id = next_leader_cfg.id
+                
+                print(f"[Critical] {current_config.id} is abdicating. PROMOTING {next_leader_id} to GLOBAL MASTER...")
+                
+                # ADOPTION: If the new leader is a leaf or has few slaves, 
+                # let it inherit all other living agents as its slaves.
+                other_survivors = [a for a in living_candidates if a.id != next_leader_id]
+                next_leader_cfg.slaves = other_survivors # Dynamic promotion inheritance
                 
                 # Update mission prompt to include resumption context
                 mission_prompt = MasterAgent.get_leader_directive(args.prompt, is_succession=True, leader_id=next_leader_id)
@@ -227,24 +248,10 @@ def main():
                     "new_master_id": "MAIN_THREAD"
                 }, msg_type="takeover_command")
                 
-                # Find the config for the new leader
-                def find_config(cfg, target_id):
-                    if cfg.id == target_id: return cfg
-                    for s in cfg.slaves:
-                        res = find_config(s, target_id)
-                        if res: return res
-                    return None
-                
-                new_cfg = find_config(config, next_leader_id)
-                if new_cfg:
-                    current_config = new_cfg
-                    # Loop will restart and become the new master in the main thread
-                    continue
-                else:
-                    print(f"[Critical] Could not find config for {next_leader_id}. Mission failed.")
-                    break
+                current_config = next_leader_cfg
+                continue
             else:
-                print("[Critical] No slaves available for promotion. Mission failed.")
+                print("[Critical] No agents remain in the squad. Mission failed.")
                 break
 
     # 7. Final Sync & Shutdown (Always try to save progress)
