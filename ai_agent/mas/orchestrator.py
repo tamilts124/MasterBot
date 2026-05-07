@@ -11,6 +11,20 @@ from .network_manager import TorManager, setup_agent_env
 from ..agent import TenaciousOllama, build_agent, extract_reply
 
 class MasterAgent:
+    @staticmethod
+    def get_leader_directive(goal: str, is_succession: bool = False, leader_id: str = None) -> str:
+        header = f"Leadership Succession to {leader_id} complete. " if (is_succession and leader_id) else "Initial Mission Start. "
+        return (
+            f"URGENT: {header}You are the Root Master of a Multi-Agent Resilient System. Your goal: {goal}\n\n"
+            "MANDATORY ARCHITECTURE PROTOCOL:\n"
+            "1. CHECK THE MANIFEST: If a slave is already in the manifest, they are WORKING. Do NOT re-assign them. Simply note their task as 'PENDING'.\n"
+            "2. ASSIGN ONLY IDLE SLAVES: Only create NEW tasks for slaves who are not in the manifest.\n"
+            "3. ANALYZE & SUMMARIZE: Analyze the project structure and write your architectural summary to 'project_analysis.md' ONLY if it needs update.\n"
+            "4. OUTPUT FORMAT: Return ONLY a JSON list of NEW objects for idle slaves: [{\"slave_id\": \"id\", \"task\": \"detailed instruction\"}].\n"
+            "If all slaves are busy, return an empty list [].\n\n"
+            "You are the authority. LEAD."
+        )
+
     def __init__(self, config: AgentConfig, bus: MessageBus, tor: TorManager, workspace: Path):
         self.config = config
         self.bus = bus
@@ -85,16 +99,12 @@ class MasterAgent:
         self._ensure_brain()
         
         manifest = self.task_assignments
+        leader_prompt = self.get_leader_directive(task_description)
+        
         prompt = (
-            f"You are the Root Master of a Multi-Agent Resilient System. Your goal: {task_description}\n\n"
+            f"{leader_prompt}\n\n"
             f"CURRENT TASK MANIFEST (Status of Slaves):\n{json.dumps(manifest, indent=2)}\n\n"
-            f"AVAILABLE SLAVES: {[s.id for s in self.config.slaves]}\n\n"
-            "MANDATORY ARCHITECTURE PROTOCOL:\n"
-            "1. CHECK THE MANIFEST: If a slave is already in the manifest, they are WORKING. Do NOT re-assign them. Simply note their task as 'PENDING'.\n"
-            "2. ASSIGN ONLY IDLE SLAVES: Only create NEW tasks for slaves who are not in the manifest.\n"
-            "3. ANALYZE & SUMMARIZE: Analyze the project structure and write your architectural summary to 'project_analysis.md' ONLY if it needs update.\n"
-            "4. OUTPUT FORMAT: Return ONLY a JSON list of NEW objects for idle slaves: [{\"slave_id\": \"id\", \"task\": \"detailed instruction\"}].\n"
-            "If all slaves are busy, return an empty list []."
+            f"AVAILABLE SLAVES: {[s.id for s in self.config.slaves]}\n"
         )
         
         try:
@@ -121,7 +131,8 @@ class MasterAgent:
                 model_name=self.config.model,
                 ollama_url=self.config.api_url,
                 ollama_key=self.config.api_key,
-                use_mas_tools=True
+                use_mas_tools=True,
+                is_master=True
             )
 
     def run_cycle(self, main_task: str):
@@ -180,8 +191,10 @@ class MasterAgent:
                 self.bus.send_message(self.config.id, sid, sub["task"], msg_type="task_assignment")
             
             # Save manifest for future resumption
+            manifest_data = self.task_assignments.copy()
+            manifest_data["MISSION_GOAL"] = main_task
             with open(manifest_path, "w") as f:
-                json.dump(self.task_assignments, f)
+                json.dump(manifest_data, f)
         
         last_cycle_time = 0
         while True:
@@ -253,16 +266,17 @@ class MasterAgent:
                 
                 # PASSIVE MONITORING MODE: Forbid the Master from re-architecting
                 manifest = self.task_assignments
+                leader_prompt = self.get_leader_directive(main_task)
+                
                 prompt = (
+                    f"{leader_prompt}\n\n"
                     f"PASSIVE MONITORING MODE ACTIVE:\n"
                     f"- Active Assignments: {json.dumps(manifest, indent=2)}\n"
                     f"- New Reports: {json.dumps(new_reports, indent=2)}\n\n"
-                    "RULES:\n"
-                    "1. CHECK ASSIGNMENTS: Compare the list of team members with the 'Active Assignments'. If a slave is NOT in the active manifest, you MUST assign them a modular task using 'send_mas_message'.\n"
-                    "2. NO REDUNDANCY: You are FORBIDDEN from re-assigning or messaging slaves who are already in the 'Active Assignments' list with the same task.\n"
-                    "3. If a slave is DONE or FAILED, remove them from the manifest and assign a NEW objective.\n"
-                    "4. COMMIT ENFORCEMENT: Remind slaves to use 'git_commit_and_push' (or commit) after every successful change.\n"
-                    "5. NO OVER-ANALYSIS: Do NOT re-analyze the project structure. Focus on keeping all slaves productive and their code committed."
+                    "MONITORING DIRECTIVE:\n"
+                    "1. Evaluate reports and approve completions.\n"
+                    "2. If a slave is DONE, remove them from the manifest and assign a NEW technical objective.\n"
+                    "3. Enforce 'git_commit_and_push' for all finished tasks."
                 )
                 if self.master_task:
                     prompt += f"\nALSO, continue your personal task: {self.master_task}. Use tools to write code."

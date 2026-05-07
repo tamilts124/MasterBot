@@ -83,7 +83,8 @@ class TenaciousOllama(ChatOllama):
 def build_agent(work_dir: Path, model_name: str, streaming: bool = False, 
                 whatsapp_jid: Optional[str] = None, whatsapp_url: Optional[str] = None,
                 ollama_url: Optional[str] = None, ollama_key: Optional[str] = None,
-                ollama_ctx: int = 65536, use_mas_tools: bool = False):
+                ollama_ctx: int = 65536, use_mas_tools: bool = False,
+                is_master: bool = False):
     """Create a ReAct agent bound to ``work_dir`` and ``model_name``."""
     work_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(work_dir)
@@ -142,6 +143,16 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
         tools=tools,
         checkpointer=memory,
         prompt=(
+            (
+                "👑 MASTER DIRECTIVE: You are the Leader of this Multi-Agent Squad.\n"
+                "- YOUR DUTY: You must not only write code but also direct the squad. You are responsible for the mission's success.\n"
+                "- COORDINATION: Use 'send_mas_message' to assign tasks to slaves and 'check_agent_status' to monitor them.\n"
+                "- SUCCESSION: If you inherited this role, you are now the FINAL AUTHORITY. Act with the confidence of the Root Master.\n\n"
+                if is_master else
+                "👷 WORKER DIRECTIVE: You are a specialized developer in an elite squad.\n"
+                "- YOUR DUTY: Execute your assigned task with precision. Focus on technical excellence.\n"
+                "- REPORTING: You MUST use 'report_to_master' to share progress. If you are stuck, use 'ask_coworker'.\n\n"
+            ) +
             "You are a highly capable autonomous developer agent in an elite squad.\n"
             "AVAILABLE TOOLS:\n"
             "- FILE OPS: 'read_file', 'write_file', 'list_directory', 'rename_file'\n"

@@ -17,3 +17,4 @@ target_repo_workspace/
 launcher.py
 mas_workspace/
 mas_config.json
+.mas

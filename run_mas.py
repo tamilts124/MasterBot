@@ -130,7 +130,7 @@ def main():
             print("🆕 Empty repository detected. Initializing first commit...")
             gitignore_path = root_dir / ".gitignore"
             with open(gitignore_path, "w") as f:
-                f.write("__pycache__/\n*.py[cod]\nnode_modules/\n.venv/\nvenv/\n.DS_Store\nmas_workspace/\nmas_config.json\n")
+                f.write("__pycache__/\n*.py[cod]\nnode_modules/\n.venv/\nvenv/\n.DS_Store\nmas_workspace/\nmas_config.json\n.mas\n")
             
             run_command(["git", "add", ".gitignore"], cwd=root_dir, label="Staging Initial Files")
             run_command(["git", "commit", "-m", "Initial commit: MARS Environment Setup"], cwd=root_dir, label="First Commit")
@@ -196,7 +196,7 @@ def main():
     
     # 6. Persistent Mission Host (Main Thread)
     current_config = config
-    mission_prompt = args.prompt
+    mission_prompt = MasterAgent.get_leader_directive(args.prompt)
     
     while True:
         root_master = MasterAgent(current_config, bus, tor, root_dir)
@@ -219,7 +219,7 @@ def main():
                 print(f"[Critical] {current_config.id} is abdicating. PROMOTING {next_leader_id}...")
                 
                 # Update mission prompt to include resumption context
-                mission_prompt = f"Resume mission: Leadership Succession to {next_leader_id} complete. Original goal: {args.prompt}"
+                mission_prompt = MasterAgent.get_leader_directive(args.prompt, is_succession=True, leader_id=next_leader_id)
                 
                 # Signal the slave that the parent is taking over its identity
                 bus.send_message(current_config.id, next_leader_id, {

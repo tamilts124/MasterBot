@@ -105,7 +105,20 @@ def main():
             new_master = MasterAgent(my_config, bus, None, Path(".."))
             new_master.discover_slaves()
             try:
-                new_master.run_cycle("Resume mission: Leadership Succession complete.")
+                # We need to find the original goal. In worker, we can try to find it from the manifest
+                # or just use a generic 'Resume current mission' if not available.
+                original_goal = "Resume current mission"
+                manifest_path = comm_dir / "global_task_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r") as f:
+                            manifest = json.load(f)
+                            # The Master's task usually represents the main goal or is in the manifest
+                            original_goal = manifest.get("MISSION_GOAL", original_goal)
+                    except: pass
+
+                succession_directive = MasterAgent.get_leader_directive(original_goal, is_succession=True, leader_id=args.id)
+                new_master.run_cycle(succession_directive)
             except Exception as e:
                 print(f"[Master {args.id}] Critical transformation failure: {e}")
         sys.exit(0)
