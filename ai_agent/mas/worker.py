@@ -291,6 +291,9 @@ def main():
                 if new_master_id == args.id:
                     print(f"[Worker {args.id}] 👑 PROMOTION RECEIVED via direct command.")
                     become_master(bus, coworkers)
+                elif new_master_id == "MAIN_THREAD":
+                    print(f"[Worker {args.id}] 👑 SUCCESSION: Parent process (Main Thread) is taking over. Yielding...")
+                    sys.exit(0)
                 else:
                     print(f"[Worker {args.id}] Inheriting tasks from failed coworker {failed_id}")
                     log_history("takeover", failed_id)

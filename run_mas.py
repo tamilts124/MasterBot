@@ -194,89 +194,78 @@ def main():
     ================================================
     """)
     
-    root_master = MasterAgent(config, bus, tor, root_dir)
-    root_master.launch_slaves()
+    # 6. Persistent Mission Host (Main Thread)
+    current_config = config
+    mission_prompt = args.prompt
     
-    # 6. Start Processing
-    try:
-        root_master.run_cycle(args.prompt)
-        print("\n[System] Mission complete. Shutting down squad.")
-    except Exception as e:
-        print(f"[Master {config.id}] FATAL BRAIN ERROR: {e}")
-        if config.slaves:
-            next_leader = config.slaves[0].id
-            print(f"[Critical] {config.id} is abdicating. PROMOTING {next_leader} TO ROOT MASTER...")
-            root_master.abdicated = True
-            bus.send_message(config.id, next_leader, {"failed_agent_id": config.id, "new_master_id": next_leader}, msg_type="takeover_command")
-        else:
-            print("[Critical] No slaves available for promotion. Mission failed.")
+    while True:
+        root_master = MasterAgent(current_config, bus, tor, root_dir)
         
-    finally:
-        # 7. Final Sync & Shutdown (Always try to save progress)
-        if 'root_master' in locals():
-            # Only shutdown if not abdicating (keep slaves alive for the next leader)
-            if not getattr(root_master, 'abdicated', False):
-                root_master.shutdown_squad()
+        # If we are reincarnating, we don't launch, we DISCOVER
+        if current_config.id != config.id:
+            print(f"[System] 👑 REINCARNATING main thread as {current_config.id}...")
+            root_master.discover_slaves()
+        else:
+            root_master.launch_slaves()
             
-            print("\n[System] Performing Final Workspace Sync...")
-            # Authenticate URL again just in case
-            if args.repo_url and args.repo_token:
-                authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
-                run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir)
+        try:
+            root_master.run_cycle(mission_prompt)
+            print("\n[System] Mission complete. Shutting down squad.")
+            break # Mission finished successfully
+        except Exception as e:
+            print(f"[Master {current_config.id}] FATAL BRAIN ERROR: {e}")
+            if current_config.slaves:
+                next_leader_id = current_config.slaves[0].id
+                print(f"[Critical] {current_config.id} is abdicating. PROMOTING {next_leader_id}...")
                 
-            run_command(["git", "add", "."], cwd=root_dir, label="Final Stage")
-            status_res = run_command(["git", "status", "--porcelain"], cwd=root_dir)
-            if status_res.stdout.strip():
-                print("🚀 Changes detected. Pushing to remote...")
-                run_command(["git", "commit", "-m", f"MARS: Mission Sync ({config.id})"], cwd=root_dir, label="Final Commit")
-                # Force push to main
-                run_command(["git", "push", "origin", "main"], cwd=root_dir, label="Final Push")
-            else:
-                print("✅ No changes to push. Workspace is clean.")
-
-        # FINAL SUCCESSOR WATCH: If the master abdicated, keep the script alive 
-        # so the promoted slave can finish the mission.
-        if 'root_master' in locals() and getattr(root_master, 'abdicated', False):
-            print("[System] 👑 Succession in progress. Keeping mission alive for the new leader...")
-            
-            # Use the correct attribute name from MasterAgent
-            slave_procs_dict = getattr(root_master, 'slave_processes', {})
-            slave_procs = [p for p in slave_procs_dict.values() if p is not None]
-            
-            last_sync_check = 0
-            while True:
-                # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
-                if time.time() - last_sync_check < 2: # Throttle a bit for stability
+                # Update mission prompt to include resumption context
+                mission_prompt = f"Resume mission: Leadership Succession to {next_leader_id} complete. Original goal: {args.prompt}"
+                
+                # Signal the slave that the parent is taking over its identity
+                bus.send_message(current_config.id, next_leader_id, {
+                    "failed_agent_id": current_config.id, 
+                    "new_master_id": "MAIN_THREAD"
+                }, msg_type="takeover_command")
+                
+                # Find the config for the new leader
+                def find_config(cfg, target_id):
+                    if cfg.id == target_id: return cfg
+                    for s in cfg.slaves:
+                        res = find_config(s, target_id)
+                        if res: return res
+                    return None
+                
+                new_cfg = find_config(config, next_leader_id)
+                if new_cfg:
+                    current_config = new_cfg
+                    # Loop will restart and become the new master in the main thread
                     continue
-                last_sync_check = time.time()
-                
-                # Check if any subprocesses are still alive
-                alive_procs = [p for p in slave_procs if p.poll() is None]
-                
-                # Mission Completion Check via MessageBus/Shared State
-                manifest_path = root_dir / ".mas" / "global_task_manifest.json"
-                is_mission_done = False
-                if manifest_path.exists():
-                    try:
-                        with open(manifest_path, "r") as f:
-                            m = json.load(f)
-                        # Check if all agents (including the new master) are completed
-                        # We look at the status files for each agent
-                        all_done = True
-                        for aid in m.keys():
-                            status = bus.get_agent_status(aid)
-                            if status.get("status") not in ["completed", "died"]:
-                                all_done = False
-                                break
-                        if all_done:
-                            print("[System] 🏁 MISSION SUCCESSFUL: Successor has completed the mission.")
-                            is_mission_done = True
-                    except Exception as e:
-                        print(f"[Watchdog] Error checking mission status: {e}")
-                
-                if is_mission_done or not alive_procs:
-                    print("[System] All active processes finished or mission complete. Shutting down.")
+                else:
+                    print(f"[Critical] Could not find config for {next_leader_id}. Mission failed.")
                     break
+            else:
+                print("[Critical] No slaves available for promotion. Mission failed.")
+                break
+
+    # 7. Final Sync & Shutdown (Always try to save progress)
+    if 'root_master' in locals():
+        # Only shutdown if mission is truly complete or failed
+        root_master.shutdown_squad()
+        
+        print("\n[System] Performing Final Workspace Sync...")
+        # Authenticate URL again just in case
+        if args.repo_url and args.repo_token:
+            authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
+            run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir)
+            
+        run_command(["git", "add", "."], cwd=root_dir, label="Final Stage")
+        status_res = run_command(["git", "status", "--porcelain"], cwd=root_dir)
+        if status_res.stdout.strip():
+            print("🚀 Changes detected. Pushing to remote...")
+            run_command(["git", "commit", "-m", f"MARS: Mission Sync ({current_config.id})"], cwd=root_dir, label="Final Commit")
+            run_command(["git", "push", "origin", "main"], cwd=root_dir, label="Final Push")
+        else:
+            print("✅ No changes to push. Workspace is clean.")
 
 if __name__ == "__main__":
     main()
