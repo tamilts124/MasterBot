@@ -11,3 +11,4 @@ httpx[socks]
 PySocks
 certifi
 ddgs
+pyautogui

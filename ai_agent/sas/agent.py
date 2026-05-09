@@ -16,7 +16,8 @@ from ..tools import (
     rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
     start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
     git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
-    is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages
+    is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
+    capture_screenshot, get_mouse_position, mouse_move, mouse_click, keyboard_type, keyboard_press, get_screen_size, analyze_screenshot, image_to_array
 )
 
 class TenaciousOllama(ChatOllama):
@@ -71,6 +72,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     tools.extend([
         rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
         start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
+        capture_screenshot, get_mouse_position, mouse_move, mouse_click, keyboard_type, keyboard_press, get_screen_size, analyze_screenshot, image_to_array,
         git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
         is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages
     ])
