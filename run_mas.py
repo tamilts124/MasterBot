@@ -6,6 +6,7 @@ import subprocess
 import time
 import io
 from pathlib import Path
+import shutil
 
 # Ensure UTF-8 encoding for Windows terminals
 if sys.stdout.encoding != 'utf-8':
@@ -19,6 +20,12 @@ from ai_agent.mas.orchestrator import MasterAgent
 
 def run_command(cmd, cwd=None, env=None, label=None):
     """Run a shell command with real-time output while capturing for results."""
+
+    class Result:
+        def __init__(self, returncode, stdout):
+            self.returncode = returncode
+            self.stdout = stdout
+
     if label:
         print(f"Action: {label}")
     process = subprocess.Popen(
@@ -36,20 +43,22 @@ def run_command(cmd, cwd=None, env=None, label=None):
         print(line, end='', flush=True)
         full_output.append(line)
     process.wait()
-    class Result:
-        def __init__(self, returncode, stdout):
-            self.returncode = returncode
-            self.stdout = stdout
     return Result(process.returncode, "".join(full_output))
 
 def main():
     parser = argparse.ArgumentParser(description="Run Hierarchical Multi-Agent System")
     parser.add_argument("--config", required=True, help="Path to mas_config.json")
-    parser.add_argument("--prompt", required=True, help="The main task for the MAS")
+    parser.add_argument("--prompt", help="The main task for the MAS (Optional for Sub-Masters)")
     parser.add_argument("--workspace", default="mas_workspace", help="Root directory for MAS work")
     parser.add_argument("--repo-url", help="Target GitHub repository URL")
     parser.add_argument("--repo-token", help="GitHub Personal Access Token")
     parser.add_argument("--no-tor", action="store_true", help="Disable Tor isolation and use direct connection")
+    
+    # Sub-Master / Identity Identity
+    parser.add_argument("--id", help="Identity of this specific agent")
+    parser.add_argument("--parent", help="ID of the parent agent")
+    parser.add_argument("--level", type=int, help="Hierarchy level")
+    
     args = parser.parse_args()
 
     # 1. Setup Environment
@@ -58,20 +67,11 @@ def main():
     
     # 2. Communication Infrastructure (Workspace Local)
     comm_dir = root_dir / ".mas"
-    bus = MessageBus(comm_dir)
-    
+
     # 2. Prepare Codebase (Safe Workspace Sync)
     if args.repo_url and args.repo_token:
         authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
         
-        # PERSISTENCE GUARD: Backup squad brain before any destructive git operations
-        import shutil
-        brain_backup_path = root_dir.parent / ".mas_temp_backup"
-        if comm_dir.exists():
-            print("🧠 Squad brain detected. Staging for preservation...")
-            if brain_backup_path.exists(): shutil.rmtree(brain_backup_path)
-            shutil.copytree(comm_dir, brain_backup_path)
-
         if not (root_dir / ".git").exists():
             print(f"📥 Initializing and fetching target repository: {args.repo_url}")
             # Instead of 'git clone .' which fails on non-empty dirs, we init and fetch
@@ -79,64 +79,12 @@ def main():
             run_command(["git", "branch", "-M", "main"], cwd=root_dir)
             run_command(["git", "remote", "add", "origin", authenticated_url], cwd=root_dir, label="Adding Remote")
             
-            fetch_res = run_command(["git", "fetch", "origin"], cwd=root_dir, label="Fetching Data")
-            if fetch_res.returncode == 0:
-                # Try to reset to the default branch (usually main or master)
-                ls_remote = run_command(["git", "ls-remote", "--symref", "origin", "HEAD"], cwd=root_dir)
-                default_branch = "main"
-                for line in ls_remote.stdout.splitlines():
-                    if line.startswith("ref: refs/heads/") and "HEAD" in line:
-                        default_branch = line.split("refs/heads/")[1].split()[0]
-                        break
-                print(f"📦 Populating workspace from branch: {default_branch}")
-                run_command(["git", "reset", "--hard", f"origin/{default_branch}"], cwd=root_dir, label="Resetting to Remote")
-            else:
-                print("⚠️ Remote repository appears to be empty or inaccessible. Proceeding with local init.")
+            fetch_res = run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
         else:
             print("🔄 Safe Workspace Sync & Populate...")
             run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir, label="Updating Remote URL")
-            run_command(["git", "fetch", "origin"], cwd=root_dir, label="Fetching Data")
-            
-            # If the workspace is empty (only .git/.mas), force a reset to populate it
-            files = [f for f in os.listdir(root_dir) if f not in [".git", ".mas"]]
-            if not files:
-                print("📭 Workspace is empty. Force-populating from remote...")
-                # Detect branch and reset
-                ls_remote = run_command(["git", "ls-remote", "--symref", "origin", "HEAD"], cwd=root_dir)
-                default_branch = "main"
-                for line in ls_remote.stdout.splitlines():
-                    if line.startswith("ref: refs/heads/") and "HEAD" in line:
-                        default_branch = line.split("refs/heads/")[1].split()[0]
-                        break
-                run_command(["git", "reset", "--hard", f"origin/{default_branch}"], cwd=root_dir, label="Resetting to Remote")
-
-        # RESTORE BRAIN: Merge local progress back into the synced workspace
-        if brain_backup_path.exists():
-            print("🧠 Restoring squad brain to workspace...")
-            # We use a custom merge to avoid deleting new files in .mas that might be on remote
-            for item in os.listdir(brain_backup_path):
-                s = brain_backup_path / item
-                d = comm_dir / item
-                if s.is_dir():
-                    if d.exists(): shutil.rmtree(d)
-                    shutil.copytree(s, d)
-                else:
-                    shutil.copy2(s, d)
-            shutil.rmtree(brain_backup_path)
-
-        # 3. Handle Empty Repository (Day Zero)
-        files = [f for f in os.listdir(root_dir) if f not in [".git", ".mas"]]
-        if not files:
-            print("🆕 Empty repository detected. Initializing first commit...")
-            gitignore_path = root_dir / ".gitignore"
-            with open(gitignore_path, "w") as f:
-                f.write("__pycache__/\n*.py[cod]\nnode_modules/\n.venv/\nvenv/\n.DS_Store\nmas_workspace/\nmas_config.json\n.mas\n")
-            
-            run_command(["git", "add", ".gitignore"], cwd=root_dir, label="Staging Initial Files")
-            run_command(["git", "commit", "-m", "Initial commit: MARS Environment Setup"], cwd=root_dir, label="First Commit")
-            run_command(["git", "branch", "-M", "main"], cwd=root_dir, label="Naming Branch Main")
-            # We don't push yet, let the agents work first
-        
+            run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
+                    
         # Configure Git Identity
         run_command(["git", "config", "user.name", "MARS Root Master"], cwd=root_dir)
         run_command(["git", "config", "user.email", "master@mars.ai"], cwd=root_dir)
@@ -145,35 +93,47 @@ def main():
     # The Master will resume by reading the manifest and status from this directory.
     comm_dir.mkdir(parents=True, exist_ok=True)
         
-    msg_dir = comm_dir / "messages"
-    status_dir = comm_dir / "status"
-    msg_dir.mkdir(parents=True, exist_ok=True)
-    status_dir.mkdir(parents=True, exist_ok=True)
-
     # 3. Load Config
     try:
         config = load_config(args.config)
-        # Master only uses its own dedicated keys
-        os.environ["API_KEYS"] = config.api_key if config.api_key else ""
+        
+        # If we are a Sub-Master, we need to find our specific node in the config tree
+        if args.id:
+            def find_agent(cfg, target_id):
+                if cfg.id == target_id: return cfg
+                for s in cfg.slaves:
+                    res = find_agent(s, target_id)
+                    if res: return res
+                return None
+            
+            agent_config = find_agent(config, args.id)
+            if not agent_config:
+                print(f"[Error] Could not find agent {args.id} in configuration.")
+                sys.exit(1)
+            config = agent_config
+            print(f"[System] Identity Confirmed: Running as {config.id} (Level {args.level})")
+            
     except Exception as e:
         print(f"[Error] Critical configuration failure: {e}")
         sys.exit(1)
 
     # Set Project Root for all agents
     os.environ["PROJECT_ROOT"] = str(Path.cwd().absolute())
-    
-    # Initialize Message Bus
     bus = MessageBus(comm_dir)
+    
+    # 4. Register Agents in Database
+    config.register_in_db(bus)
+    
     tor = TorManager() if not args.no_tor else None
-
-    # 5. Initialize Root Master
+    
+    # 5. Initialize Proxies for Entire Squad
+    if tor:
+        all_ids = config.get_all_identities()
+        print(f"[System] 🌐 Pre-warming {len(all_ids)} Tor connections for the entire squad concurrently...")
+        tor.prepare_proxies(all_ids)
     proxy = tor.get_proxy_for_agent(config.id, config.level, 0) if tor else None
     os.environ["AGENT_ID"] = config.id
-    os.environ["PARENT_ID"] = "USER"
-    
-    def get_hierarchy_map(cfg):
-        return {cfg.id: [get_hierarchy_map(s) for s in cfg.slaves]}
-    os.environ["MAS_HIERARCHY"] = json.dumps(get_hierarchy_map(config))
+    os.environ["PARENT_ID"] = args.parent if args.parent else "USER"
     
     if proxy:
         os.environ.update(setup_agent_env(proxy))
@@ -182,7 +142,8 @@ def main():
         os.environ.pop("HTTP_PROXY", None)
         os.environ.pop("HTTPS_PROXY", None)
 
-    print(f"""
+    if not args.id:
+        print(f"""
     ================================================
     MARS (Multi-Agent Resilient System) INITIALIZED
     ================================================
@@ -196,15 +157,20 @@ def main():
     
     # 6. Persistent Mission Host (Main Thread)
     current_config = config
-    mission_prompt = MasterAgent.get_leader_directive(args.prompt)
+    
+    # Root Master gets directive from CLI, Sub-Masters wait for bus messages
+    mission_prompt = MasterAgent.get_leader_directive(args.prompt) if args.prompt else None
+    
     dead_agents = set()
     
     while True:
-        root_master = MasterAgent(current_config, bus, tor, root_dir)
+        # Pass parent_id if we have one (for Sub-Masters)
+        parent_id = args.parent or os.environ.get("PARENT_ID")
+        root_master = MasterAgent(current_config, bus, tor, root_dir, config_path=args.config, parent_id=parent_id)
         
-        # If we are reincarnating, we don't launch, we DISCOVER
+        # If a new agent is taking over, we don't launch, we DISCOVER
         if current_config.id != config.id:
-            print(f"[System] 👑 REINCARNATING main thread as {current_config.id}...")
+            print(f"[System] 👑 BIRTH OF NEW AGENT: main thread adopting identity {current_config.id}...")
             root_master.discover_slaves()
         else:
             root_master.launch_slaves()
@@ -243,10 +209,12 @@ def main():
                 mission_prompt = MasterAgent.get_leader_directive(args.prompt, is_succession=True, leader_id=next_leader_id)
                 
                 # Signal the slave that the parent is taking over its identity
-                bus.send_message(current_config.id, next_leader_id, {
-                    "failed_agent_id": current_config.id, 
-                    "new_master_id": "MAIN_THREAD"
-                }, msg_type="takeover_command")
+                takeover_msg = (
+                    f"URGENT: I am your Master. My primary brain has failed, and I am now REINCARNATING using your identity ({next_leader_id}) in my main thread. "
+                    "You must CEASE all your local operations and exit your process immediately to prevent a split-brain conflict. "
+                    "I am now you. I will finish the mission."
+                )
+                bus.send_message(current_config.id, next_leader_id, takeover_msg)
                 
                 current_config = next_leader_cfg
                 continue

@@ -11,13 +11,14 @@ from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain.agents import create_agent
 from langchain_community.agent_toolkits import FileManagementToolkit
-
 from .tools import (
     rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
     report_to_master, ask_coworker, get_mas_identity, list_team_members, 
-    check_agent_status, send_mas_message, inspect_agent_communication,
-    contribute_to_knowledge, query_knowledge, list_knowledge_topics
+    check_agent_status, check_all_agents_status, send_mas_message, reply_mas_message,
+    get_unread_messages, get_unreplied_messages, inspect_agent_communication,
+    contribute_to_knowledge, query_knowledge, list_knowledge_topics,
+    delegate_task, handle_slave_failure, update_task_status, verify_task
 )
 
 class TenaciousOllama(ChatOllama):
@@ -83,8 +84,7 @@ class TenaciousOllama(ChatOllama):
 def build_agent(work_dir: Path, model_name: str, streaming: bool = False, 
                 whatsapp_jid: Optional[str] = None, whatsapp_url: Optional[str] = None,
                 ollama_url: Optional[str] = None, ollama_key: Optional[str] = None,
-                ollama_ctx: int = 65536, use_mas_tools: bool = False,
-                is_master: bool = False):
+                ollama_ctx: int = 65536, is_master: bool = False):
     """Create a ReAct agent bound to ``work_dir`` and ``model_name``."""
     work_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(work_dir)
@@ -98,8 +98,10 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     tools.extend([
         rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
         report_to_master, ask_coworker, get_mas_identity, list_team_members, 
-        check_agent_status, send_mas_message, inspect_agent_communication,
-        contribute_to_knowledge, query_knowledge
+        check_agent_status, check_all_agents_status, send_mas_message, reply_mas_message,
+        get_unread_messages, get_unreplied_messages, inspect_agent_communication,
+        contribute_to_knowledge, query_knowledge, list_knowledge_topics,
+        delegate_task, handle_slave_failure, update_task_status, verify_task
     ])
 
     if whatsapp_jid:
@@ -129,10 +131,10 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
         ollama_kwargs["client_kwargs"] = {
             "proxy": proxy, 
             "headers": headers,
-            "timeout": 120
+            "timeout": 3600
         }
     else:
-        ollama_kwargs["client_kwargs"] = {"headers": headers}
+        ollama_kwargs["client_kwargs"] = {"headers": headers, "timeout": 3600}
 
     # Create the agent using the built-in create_agent which handles the tool loop
     # Use MemorySaver for persistence
@@ -144,14 +146,15 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
         checkpointer=memory,
         prompt=(
             (
-                "👑 MASTER DIRECTIVE: You are the Leader of this Multi-Agent Squad.\n"
-                "- YOUR DUTY: You must not only write code but also direct the squad. You are responsible for the mission's success.\n"
-                "- COORDINATION: Use 'send_mas_message' to assign tasks to slaves and 'check_agent_status' to monitor them.\n"
-                "- SUCCESSION: If you inherited this role, you are now the FINAL AUTHORITY. Act with the confidence of the Root Master.\n\n"
+                "👑 MASTER DIRECTIVE: You are a Leader in this Multi-Agent Squad.\n"
+                "- YOUR DUTY: You must lead your own sub-squad while also fulfilling the objectives given by your superior Master.\n"
+                "- DELEGATION: Use 'delegate_task' to assign work to your slaves and 'check_agent_status' to monitor their progress.\n"
+                "- REPORTING: You MUST use 'report_to_master' periodically to keep your superior informed of your branch's overall progress.\n"
+                "- SUCCESSION: If you inherited this role, you are now the AUTHORITY for this branch. Act with confidence.\n\n"
                 if is_master else
                 "👷 WORKER DIRECTIVE: You are a specialized developer in an elite squad.\n"
                 "- YOUR DUTY: Execute your assigned task with precision. Focus on technical excellence.\n"
-                "- REPORTING: You MUST use 'report_to_master' to share progress. If you are stuck, use 'ask_coworker'.\n\n"
+                "- REPORTING: You MUST use 'report_to_master' to share progress with your Master. If you are stuck, use 'ask_coworker'.\n\n"
             ) +
             "You are a highly capable autonomous developer agent in an elite squad.\n"
             "AVAILABLE TOOLS:\n"
@@ -160,23 +163,21 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "- RESEARCH: 'web_search', 'fetch_url'\n"
             "- VERSION CONTROL: 'git_status', 'git_commit_and_push', 'git_pull', 'git_stash_save', 'git_stash_pop'\n"
             "- WHATSAPP: 'is_whatsapp_connected', 'send_whatsapp_message', 'get_whatsapp_last_messages'\n"
-            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'check_agent_status', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge', 'list_knowledge_topics'\n\n"
+            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'reply_mas_message', 'check_agent_status', 'check_all_agents_status', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge', 'list_knowledge_topics', 'delegate_task', 'handle_slave_failure', 'update_task_status'\n\n"
             "MANDATORY COORDINATION RULES:\n"
             "0. NO INDIVIDUAL WORK: You are FORBIDDEN from working in isolation. You must cooperate with others at every stage of the development cycle.\n"
             "1. SHARED KNOWLEDGE IS POWER: Before analyzing any file or directory, you MUST use 'list_knowledge_topics' to see what is already understood. If a topic exists, use 'query_knowledge' instead of re-analyzing.\n"
             "2. CONTRIBUTE OR FAIL: After you understand a file, fix a bug, or design a system, you MUST use 'contribute_to_knowledge' immediately. You are judged by how much you help your coworkers work faster. If you don't share knowledge, you are an obstacle."
             "3. COMMUNICATION IS MANDATORY: You MUST communicate with your coworkers and the Master at all times. If you are not talking, you are failing.\n"
-            "4. SHARE & VALIDATE PLAN: Before starting any task, you MUST share your implementation plan using 'send_mas_message'. Wait for feedback before proceeding.\n"
+            "4. SHARE & VALIDATE PLAN: Before starting any task, you MUST share your implementation plan to master using 'send_mas_message'. Wait for feedback before proceeding.\n"
             "5. ACKNOWLEDGE & FEEDBACK: If a coworker shares a plan, you MUST read it and provide feedback or acknowledgment.\n"
             "6. IMPORTANT DECISIONS: For any major architectural change, you MUST consult the Master for approval.\n"
             "7. ASK WHEN IN DOUBT: If you have any doubt, ask the Master or a coworker immediately.\n"
             "8. MONITOR: Use 'check_agent_status' and 'inspect_agent_communication' to align your work.\n"
             "9. REPORT: You MUST report to the Master ('report_to_master') after every significant milestone.\n"
-            "10. REPETITION IS DEATH: If you repeat any action, tool-call, or report twice, you will be considered COMPROMISED and your process will be TERMINATED. Efficiency is your only survival metric.\n"
-            "11. ONE-SHOT COMMUNICATION: When using 'send_mas_message' or 'report_to_master', you MUST only do it ONCE per objective. Do not wait for a response; send the message and immediately proceed to your next technical file operation.\n"
-            "12. NO SPAM: Do not repeat successful reports. Once a report is sent, it is archived. Repeating it is a waste of resources and will lead to your deletion.\n"
-            "13. INBOX PRIORITY: If you see an [INBOX ALERT], read it once and ACT. Do not keep checking the inbox if no new messages have arrived.\n"
-            "14. COMMIT & SECURE: You MUST use 'git_commit_and_push' after every successful file edit or significant milestone. Sharing code via GitHub is your primary duty for mission persistence."
+            "10. ONE-SHOT COMMUNICATION: When using 'send_mas_message' or 'report_to_master', you MUST only do it ONCE per objective. Do not wait for a response; send the message and immediately proceed to your next technical file operation.\n"
+            "11. INBOX PRIORITY: If you see an [INBOX ALERT], read it once and ACT. Do not keep checking the inbox if no new messages have arrived.\n"
+            "12. COMMIT & SECURE: You MUST use 'git_commit_and_push' after every successful file edit or significant milestone. Sharing code via GitHub is your primary duty for mission persistence."
         )
     )
     
@@ -192,20 +193,61 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                 from .mas.communication import MessageBus
                 bus = MessageBus(work_dir / ".mas")
                 
-                # 1. Mandatory Inbox Priority
-                pending = bus.get_messages(os.environ.get("AGENT_ID", ""))
-                if pending:
-                    senders = list(set([m['from'] for m in pending]))
-                    inbox_alert = f"\n\n[INBOX ALERT] You have {len(pending)} unread messages from: {', '.join(senders)}. You MUST use 'inspect_agent_communication' to read them immediately before continuing your work."
-                    if isinstance(input_data, dict) and "input" in input_data:
-                        input_data["input"] += inbox_alert
-                    else:
-                        input_data = str(input_data) + inbox_alert
+                # Ping the agent as active right before generating the prompt
+                agent_id = os.environ.get("AGENT_ID", "Agent")
                 
-                # 2. Proactive Knowledge Manifest
+                # Authority Check: Am I still alive in the Master's eyes?
+                agent_info = bus.get_agents(agent_id)
+                if agent_info and agent_info.get("status") == "died":
+                    print(f"\n[FATAL] Master has marked {agent_id} as DIED. Ceasing operations to prevent conflicts.\n")
+                    import sys
+                    sys.exit(0)
+                    
+                bus.update_agent(agent_id)
+                
+                # 1. Mandatory Inbox Priority
+                counts = bus.get_unread_messages_count(agent_id)
+                unread = counts["unread"]
+                unreplied = counts["unreplied"]
+                
+                if unread or unreplied:
+                    alert = "\n\n[INBOX ALERT] "
+                    if unread:
+                        alert += f"You have {unread} NEW messages. "
+                    if unreplied:
+                        alert += f"You have {unreplied} UNREPLIED messages that REQUIRE a response. "
+                    
+                    alert += "You MUST use 'get_unread_messages' to read new ones and 'get_unreplied_messages' to see what needs a response. Then use 'reply_mas_message' or 'send_mas_message' to respond immediately before continuing your work."
+                    
+                    if isinstance(input_data, dict) and "input" in input_data:
+                        input_data["input"] += alert
+                    else:
+                        input_data = str(input_data) + alert
+                
+                # 2. Verification Awareness: Do I have unverified work from slaves?
+                if is_master:
+                    all_slave_tasks = bus.get_agent_task_status(assigner_id=agent_id)
+                    unverified = [t for t in all_slave_tasks if t["status"] == "completed" and not t.get("is_verified")]
+                    
+                    if unverified:
+                        v_alert = "\n\n[VERIFICATION ALERT] "
+                        v_alert += f"You have {len(unverified)} tasks COMPLETED by your slaves that REQUIRE YOUR VERIFICATION. "
+                        v_alert += "You MUST review these tasks. Use 'verify_task' to approve them or send them back for rework."
+                        
+                        if isinstance(input_data, dict) and "input" in input_data:
+                            input_data["input"] += v_alert
+                        else:
+                            input_data = str(input_data) + v_alert
+                
+                # 3. Proactive Knowledge Manifest
                 knowledge = bus.get_knowledge()
                 if knowledge:
-                    topics = ", ".join(knowledge.keys())
+                    topic_list = []
+                    for topic, data in knowledge.items():
+                        path = data.get("relative_file_path")
+                        topic_list.append(f"{topic} (File: {path})" if path else topic)
+                    
+                    topics = ", ".join(topic_list)
                     k_alert = (
                         f"\n\n[SQUAD KNOWLEDGE] Vault contains insights on: {topics}. Use 'query_knowledge' to retrieve understanding. "
                         "CRITICAL: If you improve a file, fix a bug, or discover a nuance NOT in the vault, you MUST use 'contribute_to_knowledge' to update it. "

@@ -4,6 +4,7 @@ import subprocess
 import os
 from pathlib import Path
 from typing import Dict, Optional
+import threading
 
 class TorManager:
     def __init__(self, base_socks_port: int = 9050, base_control_port: int = 9051):
@@ -18,24 +19,39 @@ class TorManager:
             return s.connect_ex(("127.0.0.1", port)) == 0
 
     def get_proxy_for_agent(self, agent_id: str, level: int, index: int) -> str:
-        """Assign a unique Tor port. Reuse if active, launch and WAIT if silent."""
-        port = self.base_socks_port + (level * 20) + (index * 5)
-        control = port + 1
+        """Assign a unique Tor port. Assumes prepare_proxies was already called."""
+        port = self.base_socks_port + (level * 100) + (index * 5)
         
-        if self.is_port_open(port):
-            print(f"[Tor] Port {port} is ALREADY ACTIVE. Reusing instance for {agent_id}.")
-        else:
-            self.start_tor_instance(port, control)
-            # Physical Wait: Do not return until the port is actually open
-            print(f"[Tor] Waiting for instance on {port} to wake up...")
-            for _ in range(30): # Up to 30 seconds
-                if self.is_port_open(port):
-                    print(f"[Tor] Instance on {port} is now READY.")
-                    break
-                pass # NO SLEEP
+        if not self.is_port_open(port):
+            print(f"[Tor] ⚠️ WARNING: Port {port} is NOT active. Did you forget to call prepare_proxies?")
             
         self.agent_ports[agent_id] = port
         return f"socks5://127.0.0.1:{port}"
+
+    def prepare_proxies(self, agent_identities: list):
+        """Launch and wait for multiple Tor proxies concurrently to speed up squad boot time.
+        agent_identities is a list of tuples: (level, index)"""
+        threads = []
+        
+        def launch_and_wait(level, index):
+            port = self.base_socks_port + (level * 100) + (index * 5)
+            control = port + 1
+            if not self.is_port_open(port):
+                self.start_tor_instance(port, control)
+                print(f"[Tor] Thread waiting for instance on {port} to wake up...")
+                for _ in range(60): # Up to 30 seconds
+                    if self.is_port_open(port):
+                        print(f"[Tor] Thread instance on {port} is now READY.")
+                        break
+                    time.sleep(0.5)
+
+        for level, i in agent_identities:
+            t = threading.Thread(target=launch_and_wait, args=(level, i))
+            t.start()
+            threads.append(t)
+            
+        for t in threads:
+            t.join()
 
     def start_tor_instance(self, socks_port: int, control_port: int):
         """Spawn a new background Tor process."""

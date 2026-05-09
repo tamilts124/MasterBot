@@ -1,3 +1,4 @@
+from typing import Optional
 import subprocess
 import sys
 import time
@@ -9,6 +10,7 @@ from .config_loader import AgentConfig
 from .communication import MessageBus
 from .network_manager import TorManager, setup_agent_env
 from ..agent import TenaciousOllama, build_agent, extract_reply
+import re
 
 class MasterAgent:
     @staticmethod
@@ -17,29 +19,33 @@ class MasterAgent:
         return (
             f"URGENT: {header}You are the Root Master of a Multi-Agent Resilient System. Your goal: {goal}\n\n"
             "MANDATORY ARCHITECTURE PROTOCOL:\n"
-            "1. CHECK THE MANIFEST: If a slave is already in the manifest, they are WORKING. Do NOT re-assign them. Simply note their task as 'PENDING'.\n"
-            "2. ASSIGN ONLY IDLE SLAVES: Only create NEW tasks for slaves who are not in the manifest.\n"
-            "3. ANALYZE & SUMMARIZE: Analyze the project structure and write your architectural summary to 'project_analysis.md' ONLY if it needs update.\n"
-            "4. OUTPUT FORMAT: Return ONLY a JSON list of NEW objects for idle slaves: [{\"slave_id\": \"id\", \"task\": \"detailed instruction\"}].\n"
-            "If all slaves are busy, return an empty list [].\n\n"
+            "1. SLAVE COMMAND & MONITORING: If you have slaves, you must command them with clear, detailed requirements and actively monitor their progress.\n"
+            "2. REVIEW & FEEDBACK: When a worker reports their work, review it carefully. If there are issues, explain the corrections clearly so they can fix them.\n"
+            "3. PERSONAL RESPONSIBILITY: You may also be assigned direct coding tasks. Be attentive to your own coding responsibilities while monitoring the squad.\n"
+            "4. TOOL UTILIZATION: You have access to many powerful tools. Use them extensively to accomplish most of the work.\n\n"
             "You are the authority. LEAD."
         )
 
-    def __init__(self, config: AgentConfig, bus: MessageBus, tor: TorManager, workspace: Path):
+    def __init__(self, config: AgentConfig, bus: MessageBus, tor: TorManager, workspace: Path, config_path: str = None, parent_id: str = None):
         self.config = config
         self.bus = bus
         self.tor = tor
         self.workspace = workspace
+        self.config_path = config_path
+        self.parent_id = parent_id
         self.slave_processes: Dict[str, subprocess.Popen] = {}
-        self.task_assignments: Dict[str, str] = {} # slave_id -> task_description
         self.reassignment_counts: Dict[str, int] = {} # task_description -> count
         self.abdicated = False
+        self.project_root = str(Path(__file__).parent.parent.parent.absolute())
+        
+        existing_pythonpath = os.environ.get("PYTHONPATH", "")
+        self.target_pythonpath = f"{self.project_root}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else self.project_root
 
     def discover_slaves(self):
         """Used by promoted Masters to find existing slave processes without re-launching them."""
         print(f"[Master {self.config.id}] 🔍 RECONNECTING WITH SQUAD...")
         for slave_config in self.config.slaves:
-            status = self.bus.get_agent_status(slave_config.id)
+            status = self.bus.get_agent_task_status(slave_config.id)
             if status.get("status") not in ["died", "offline"]:
                 print(f"[Master {self.config.id}] Re-linked with active slave: {slave_config.id}")
                 # Mark as known. The cycle will monitor via status if proc is None
@@ -51,20 +57,14 @@ class MasterAgent:
             proxy = self.tor.get_proxy_for_agent(slave_config.id, self.config.level + 1, i) if self.tor else None
             env = setup_agent_env(proxy) if proxy else os.environ.copy()
             
-            # Pass Coworker List
-            coworkers = [s.id for s in self.config.slaves if s.id != slave_config.id]
-            env["COWORKERS"] = ",".join(coworkers)
-            
-            # Launch as a module to handle relative imports correctly
-            engine_root = Path(__file__).parent.parent.parent.resolve()
-            env["PYTHONPATH"] = str(engine_root)
-            
-            proxy = self.tor.get_proxy_for_agent(slave_config.id, slave_config.level, i) if self.tor else None
-            env = setup_agent_env(proxy) if proxy else env
+            # Ensure the worker can find the ai_agent module
+            env["PYTHONPATH"] = self.target_pythonpath
             
             if slave_config.slaves:
                 # Sub-masters run run_mas.py
-                cmd = [sys.executable, str(engine_root / "run_mas.py"), "--id", slave_config.id, "--parent", self.config.id, "--level", str(slave_config.level)]
+                cmd = [sys.executable, str(Path(self.project_root) / "run_mas.py"), "--id", slave_config.id, "--parent", self.config.id, "--level", str(slave_config.level)]
+                if self.config_path:
+                    cmd.extend(["--config", self.config_path])
                 if not self.tor: cmd.append("--no-tor")
             else:
                 # Workers run as modules
@@ -79,14 +79,10 @@ class MasterAgent:
             ]
                 if not self.tor: cmd.append("--no-tor")
             
-            print(f"[Master {self.config.id}] Launching Slave {slave_config.id} {'on ' + proxy if proxy else '(Direct)'}")
-            # print(f"[Debug] Command: {' '.join(cmd)}")
-            # print(f"[Debug] Env Proxy: {env.get('HTTP_PROXY')}")
+            # Set parent for all slaves
+            env["PARENT_ID"] = self.config.id
             
-            # Ensure the worker can find the ai_agent module
-            project_root = str(Path(__file__).parent.parent.parent.absolute())
-            existing_pythonpath = env.get("PYTHONPATH", "")
-            env["PYTHONPATH"] = f"{project_root}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else project_root
+            print(f"[Master {self.config.id}] Launching Slave {slave_config.id} {'on ' + proxy if proxy else '(Direct)'}")
             
             proc = subprocess.Popen(cmd, env=env, cwd=self.workspace)
             self.slave_processes[slave_config.id] = proc
@@ -98,13 +94,14 @@ class MasterAgent:
         # Ensure brain is ready
         self._ensure_brain()
         
-        manifest = self.task_assignments
+        # Get real-time status from DB for all agents
+        manifest = self.bus.get_all_agents_task_status()
         leader_prompt = self.get_leader_directive(task_description)
         
         prompt = (
             f"{leader_prompt}\n\n"
-            f"CURRENT TASK MANIFEST (Status of Slaves):\n{json.dumps(manifest, indent=2)}\n\n"
-            f"AVAILABLE SLAVES: {[s.id for s in self.config.slaves]}\n"
+            f"LIVE SQUAD STATUS (Real-time Database Manifest):\n{json.dumps(manifest, indent=2)}\n\n"
+            f"AVAILABLE SLAVES (Static Config): {[s.id for s in self.config.slaves]}\n"
         )
         
         try:
@@ -112,7 +109,6 @@ class MasterAgent:
             result = self.master_agent.invoke({"input": prompt})
             reply = extract_reply(result)
             # Try to parse JSON from the reply
-            import re
             json_match = re.search(r"\[.*\]", reply, re.DOTALL)
             if json_match:
                 sub_tasks = json.loads(json_match.group(0))
@@ -134,211 +130,100 @@ class MasterAgent:
                 model_name=self.config.model,
                 ollama_url=self.config.api_url,
                 ollama_key=self.config.api_key,
-                use_mas_tools=True,
                 is_master=True
             )
 
-    def run_cycle(self, main_task: str):
+    def run_cycle(self, main_task: Optional[str] = None):
         self._ensure_brain()
         self.start_time = time.time()
-        self.wipeout_limit = 6 * 3600 # 6 hours
-        self.emergency_threshold = 5.5 * 3600 # 5.5 hours
         
-        self.bus.update_status(self.config.id, "active", main_task)
-        
-        print(f"[Master {self.config.id}] 🛡️ SQUAD VERIFICATION: Waiting for Slaves to report in...")
-        active_slaves = set()
-        v_start = time.time()
-        # Wait up to 60 seconds for roll-call to allow for Tor proxy latency
-        while len(active_slaves) < len(self.slave_processes):
-            # NO WAIT - NO TIMEOUT
-
-            # We check ALL pending messages
-            messages = self.bus.get_messages(self.config.id)
-            for msg in messages:
-                if msg.get("type") == "status_report":
-                    sid = msg.get("from")
-                    if sid not in active_slaves:
-                        print(f"[Master {self.config.id}] ✅ PROOF OF LIFE: {sid} is ACTIVE and COORDINATED.")
-                        active_slaves.add(sid)
-            pass # NO SLEEP
-
-
-        print(f"[Master {self.config.id}] 🚀 SQUAD READY ({len(active_slaves)}/{len(self.slave_processes)}).")
-        
-        # RESUMPTION LOGIC: Check if this is a continuation of a previously saved mission
-        manifest_path = self.bus.base_dir / "global_task_manifest.json"
-        if manifest_path.exists():
-            print(f"[Master {self.config.id}] 📂 EXISTING MISSION DETECTED. Resuming from manifest...")
-            with open(manifest_path, "r") as f:
-                self.task_assignments = json.load(f)
-            # Restore personal task
-            self.master_task = self.task_assignments.get(self.config.id)
-            print(f"[Master {self.config.id}] Successfully restored {len(self.task_assignments)} active assignments. Waking up squad...")
-            # Re-notify slaves of their tasks so they can start immediately on the new VM
-            for sid, task in self.task_assignments.items():
-                if sid != self.config.id:
-                    self.bus.send_message(self.config.id, sid, task, msg_type="task_assignment")
-        else:
-            print(f"[Master {self.config.id}] 🏛️ COMMENCING NEW MISSION ARCHITECTURE...")
-            sub_tasks = self.split_task(main_task)
-            self.master_task = None
-            for sub in sub_tasks:
-                sid = sub["slave_id"]
-                if sid == self.config.id:
-                    self.master_task = sub["task"]
-                    print(f"[Master {self.config.id}] 🛠️ Internalizing personal task: {self.master_task}")
-                    continue
-                
-                self.task_assignments[sid] = sub["task"]
-                self.bus.send_message(self.config.id, sid, sub["task"], msg_type="task_assignment")
-            
-            # Save manifest for future resumption
-            manifest_data = self.task_assignments.copy()
-            manifest_data["MISSION_GOAL"] = main_task
-            with open(manifest_path, "w") as f:
-                json.dump(manifest_data, f)
-        
+        # 2. Autonomous Leadership Cycle
         last_cycle_time = 0
         while True:
-            # NO SLEEP - Rule #1 Compliance (Busy-Wait Throttle)
-            if time.time() - last_cycle_time < 1:
+            # Busy-Wait Throttle
+            if time.time() - last_cycle_time < 2:
                 continue
             last_cycle_time = time.time()
-            last_cycle_time = time.time()
-            
-            # Check for timeout (with 10-minute safety buffer for false alarms)
-            elapsed = time.time() - self.start_time
-            if elapsed > 600 and elapsed > self.emergency_threshold:
-                self.trigger_emergency_save(reason=f"6-hour wipe-out approaching ({int(elapsed)}s elapsed)")
-                break
 
-            # Check for failed processes
-            failed_slaves = []
+            # Check Pulse: Detect hardware/OS failures of managed slaves
             for slave_id, proc in list(self.slave_processes.items()):
-                if proc is None:
-                    # Promoted Master path: Monitor via status timestamp
-                    status = self.bus.get_agent_status(slave_id)
-                    last_update = status.get("last_update", 0)
-                    if last_update > 0 and (time.time() - last_update > 30):
-                        print(f"[Master {self.config.id}] Inherited slave {slave_id} has gone SILENT (30s). Reassigning.")
-                        failed_slaves.append(slave_id)
-                        del self.slave_processes[slave_id]
-                    continue
-
-                ret = proc.poll()
-                if ret is not None:
-                    print(f"[Master {self.config.id}] Slave {slave_id} exited with code {ret}. Task needs reassignment.")
-                    failed_slaves.append(slave_id)
+                if proc and proc.poll() is not None:
+                    print(f"[Master {self.config.id}] Slave {slave_id} process DIED. Informing brain.")
+                    self.bus.update_agent(slave_id, status="died")
                     del self.slave_processes[slave_id]
 
-            for failed_id in failed_slaves:
-                task_to_resume = self.task_assignments.pop(failed_id, None)
-                if task_to_resume:
-                    count = self.reassignment_counts.get(task_to_resume, 0)
-                    if count >= 3:
-                        print(f"[Critical] Task '{task_to_resume[:30]}' failed {count} times. CIRCUIT BREAKER TRIGGERED.")
-                        # Alert user via WhatsApp if possible
-                        self.bus.send_message(self.config.id, "USER", f"CRITICAL: Task '{task_to_resume}' failed too many times. Manual intervention required.", msg_type="emergency_alert")
-                        continue
-                    self.reassignment_counts[task_to_resume] = count + 1
-                
-                self.handle_slave_failure(failed_id, task_to_resume)
-
-            # 1. Check for incoming reports
-            new_reports = self.bus.get_messages(self.config.id)
-            if new_reports:
-                print(f"[Master {self.config.id}] 📝 PROCESSING NEW REPORTS FROM SQUAD...")
-                for msg in new_reports:
-                    if msg["type"] == "task_report":
-                        slave_id = msg["from"]
-                        print(f"[Master {self.config.id}] Received report from {slave_id}")
-                        self.bus.send_message(self.config.id, slave_id, "Task Approved", msg_type="task_approval")
-                        # Remove from assignments once approved
-                        if slave_id in self.task_assignments:
-                            del self.task_assignments[slave_id]
-                    elif msg["type"] == "limit_reached":
-                        error_reason = msg.get("content", {}).get("error", "Unknown Limit")
-                        print(f"[Master {self.config.id}] Slave {msg['from']} DIED. Reason: {error_reason}")
-                        task_to_resume = self.task_assignments.pop(msg["from"], None)
-                        self.handle_slave_failure(msg["from"], task_to_resume)
-                    elif msg["type"] == "duplicate_task_report":
-                        content = msg.get("content", {})
-                        print(f"[Master {self.config.id}] ⚠️ DUPLICATE TASK ALERT from {msg['from']}: Task already held by {content.get('already_assigned_to')}")
-                        # Master can decide to re-architect or ignore
-                
-                # PASSIVE MONITORING MODE: Forbid the Master from re-architecting
-                manifest = self.task_assignments
-                leader_prompt = self.get_leader_directive(main_task)
-                
-                prompt = (
-                    f"{leader_prompt}\n\n"
-                    f"PASSIVE MONITORING MODE ACTIVE:\n"
-                    f"- Active Assignments: {json.dumps(manifest, indent=2)}\n"
-                    f"- New Reports: {json.dumps(new_reports, indent=2)}\n\n"
-                    "MONITORING DIRECTIVE:\n"
-                    "1. Evaluate reports and approve completions.\n"
-                    "2. If a slave is DONE, remove them from the manifest and assign a NEW technical objective.\n"
-                    "3. Enforce 'git_commit_and_push' for all finished tasks."
-                )
-                if self.master_task:
-                    prompt += f"\nALSO, continue your personal task: {self.master_task}. Use tools to write code."
-                
-                result = self.master_agent.invoke({"input": prompt})
-                print(f"[Master {self.config.id}] Monitoring cycle complete.")
+            # 2. Consult Brain (Autonomous Leadership)
+            manifest = self.bus.get_agent_task_status(assigner_id=self.config.id)
+            leader_directive = self.get_leader_directive(main_task)
             
-            # Periodically work on personal task even if no reports (every 10 minutes to avoid spam)
-            elif self.master_task and (time.time() - getattr(self, 'last_personal_work', 0) > 600):
-                self.last_personal_work = time.time()
-                print(f"[Master {self.config.id}] 🛠️ Working on personal task...")
-                result = self.master_agent.invoke({"input": f"Continue working on your personal task: {self.master_task}. Keep improving the code based on the project analysis."})
-                print(f"[Master {self.config.id}] Task progress: {extract_reply(result)[:100]}...")
+            prompt = (
+                f"{leader_directive}\n\n"
+                f"SQUAD MANIFEST:\n"
+                f"{json.dumps(manifest, indent=2)}\n\n"
+                "SQUAD STATUS ALERT:\n"
+                "1. If any slave is 'died', reassign their work immediately using 'handle_slave_failure'.\n"
+                "2. Lead the squad toward the mission goal. You have total authority."
+            )
+            
+            print(f"[Master {self.config.id}] 🧠 COMMANDER is leading...")
+            self.master_agent.invoke({"input": prompt})
 
-            # Prevent CPU/API spam with a loop sleep
-            pass # NO SLEEP
-
-
-            # 2. Update Master heartbeat
-            self.bus.update_status(self.config.id, "active")
-
-            # 3. Check if all tasks are completed
-            if not self.task_assignments and not self.slave_processes:
-                print(f"[Master {self.config.id}] MISSION COMPLETE. All sub-tasks finished and verified.")
-                self.bus.update_status(self.config.id, "completed")
-                break
-
+            # 3. Check for Mission Completion
+            all_tasks = self.bus.get_agent_task_status(assigner_id=self.config.id)
+            if all_tasks: # Only complete if we actually assigned something
+                incomplete = [t for t in all_tasks if t["status"] != "completed"]
+                if not incomplete:
+                    print(f"[Master {self.config.id}] MISSION COMPLETE. All sub-tasks verified as COMPLETED in Database.")
+                    self.bus.update_agent_task_status(self.config.id, "completed", row_id=self.master_row_id)
+                    break
 
     def handle_slave_failure(self, failed_id: str, task_to_resume: str = None):
-        healthy_coworkers = [sid for sid, proc in self.slave_processes.items() if proc.poll() is None]
+        # Find healthy coworkers, handling both managed subprocesses and inherited agents
+        healthy_coworkers = []
+        for sid, proc in self.slave_processes.items():
+            if sid == failed_id:
+                continue
+            if proc is None:
+                # Inherited agent: check DB status
+                agent_info = self.bus.get_agents(sid)
+                if agent_info.get("status") != "died":
+                    healthy_coworkers.append(sid)
+            elif proc.poll() is None:
+                # Managed subprocess: check OS poll
+                healthy_coworkers.append(sid)
         
         if not healthy_coworkers:
             print(f"[Critical] No healthy coworkers to take over for {failed_id}!")
+            # Last resort: try to handle it personally if the Master isn't too busy
             return
 
         target_id = healthy_coworkers[0]
         
+        # BULK TAKEOVER: Move all incomplete tasks in the database
+        print(f"[Master {self.config.id}] 📂 BULK TAKEOVER: Moving all pending work from {failed_id} to {target_id}")
+        self.bus.reassign_all_tasks(failed_id, target_id)
+        
         if task_to_resume:
-            print(f"[Master {self.config.id}] Reassigning task '{task_to_resume[:30]}...' to {target_id}")
-            # Pass the failed agent's ID so the new one can load history
-            self.bus.send_message(self.config.id, target_id, {
-                "failed_agent_id": failed_id,
-                "task": task_to_resume,
-                "instruction": "Resume this task using the history from the failed agent."
-            }, msg_type="task_assignment")
-            self.task_assignments[target_id] = task_to_resume
+            print(f"[Master {self.config.id}] Reassigning primary task '{task_to_resume[:30]}...' to {target_id}")
+            msg_text = (
+                f"The agent {failed_id} is died. As Master, I have assigned his in-progress and pending tasks to you. "
+                f"Please finish your current tasks first, then proceed with these inherited tasks. The primary inherited task is: {task_to_resume}. "
+                "Once you complete all your own and these inherited tasks, your mission is complete."
+            )
+            self.bus.send_message(self.config.id, target_id, msg_text, need_reply=True)
         else:
-            # Generic takeover for sub-masters
-            self.bus.send_message(self.config.id, target_id, {
-                "failed_agent_id": failed_id,
-                "new_master_id": target_id,
-                "instruction": "Inherit slaves and tasks from the failed coworker."
-            }, msg_type="takeover_command")
+            # Generic takeover for complex roles
+            msg_text = (
+                f"The agent {failed_id} is died. As Master, I have assigned all his responsibilities and pending tasks to you in the database. "
+                "Finish your current responsibilities first, then check your task list to take over for that branch of the squad."
+            )
+            self.bus.send_message(self.config.id, target_id, msg_text, need_reply=True)
 
     def trigger_emergency_save(self, reason: str = "Unknown"):
         """Force all slaves to save and push work immediately."""
         print(f"[Master {self.config.id}] TRIGGERING EMERGENCY SAVE. Reason: {reason}")
         for sid in self.slave_processes:
-            self.bus.send_message(self.config.id, sid, {"reason": reason}, msg_type="emergency_alert")
+            self.bus.send_message(self.config.id, sid, {"reason": reason})
         
         # Master's own save
         
@@ -349,12 +234,12 @@ class MasterAgent:
         """Normal shutdown when mission is complete."""
         print(f"[Master {self.config.id}] Shutting down squad normally.")
         for sid in list(self.slave_processes.keys()):
-            self.bus.send_message(self.config.id, sid, "Mission Complete", msg_type="shutdown")
+            self.bus.send_message(self.config.id, sid, "Mission Complete")
             proc = self.slave_processes.pop(sid)
             proc.terminate()
 
     def resolve_conflicts(self, slave_a: str, slave_b: str):
         """Logic for two slaves to discuss and fix overlaps."""
         print(f"[Master {self.config.id}] Initiating conflict resolution between {slave_a} and {slave_b}")
-        self.bus.send_message(self.config.id, slave_a, f"Conflict detected with {slave_b}. Discuss.", msg_type="conflict_notice")
-        self.bus.send_message(self.config.id, slave_b, f"Conflict detected with {slave_a}. Discuss.", msg_type="conflict_notice")
+        self.bus.send_message(self.config.id, slave_a, f"Conflict detected with {slave_b}. Discuss.")
+        self.bus.send_message(self.config.id, slave_b, f"Conflict detected with {slave_a}. Discuss.")

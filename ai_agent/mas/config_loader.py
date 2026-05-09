@@ -1,5 +1,7 @@
+from ai_agent.mas.communication import MessageBus
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional
 from pathlib import Path
 
@@ -8,7 +10,9 @@ DEFAULT_API_URL = "https://ollama.com"
 
 class AgentConfig:
     def __init__(self, data: Dict[str, Any], parent_id: Optional[str] = None, level: int = 0):
-        self.id = data.get("id", f"agent_{os.urandom(2).hex()}")
+        self.id = data.get("id", f"agent{os.urandom(2).hex()}")
+        if not re.match(r"^[a-zA-Z0-9]+$", self.id):
+            raise ValueError(f"Agent ID '{self.id}' contains invalid characters. Only alphanumeric characters (a-zA-Z0-9) are allowed.")
         self.model = data.get("model", DEFAULT_MODEL)
         self.api_url = data.get("api_url", DEFAULT_API_URL)
         raw_key = data.get("api_key", "")
@@ -16,8 +20,6 @@ class AgentConfig:
         self.api_key = self.api_keys[0] if self.api_keys else None
         
         config = data.get("config", {})
-        self.communicate_same_level = config.get("communicate_same_level_agents", True)
-        self.communicate_anyone = config.get("communicate_anyone", False)
         self.can_coding = config.get("can_coding", False)
         
         self.parent_id = parent_id
@@ -31,6 +33,20 @@ class AgentConfig:
         if not self.slaves:
             self.can_coding = True
 
+    def register_in_db(self, bus: MessageBus):
+        bus.update_agent(self.id, status="live", parent_id=self.parent_id)
+        for slave in self.slaves:
+            slave.register_in_db(bus)
+
+    def get_all_identities(self, index: int = 0) -> List[tuple]:
+        ids = [(self.level, index)]
+        for i, slave in enumerate(self.slaves):
+            ids.extend(slave.get_all_identities(i))
+        return ids
+
+    def get_hierarchy_map(self) -> Dict[str, List[Any]]:
+        return {self.id: [slave.get_hierarchy_map() for slave in self.slaves]}
+
     def to_dict(self) -> Dict[str, Any]:
         return {
             "id": self.id,
@@ -38,8 +54,6 @@ class AgentConfig:
             "api_url": self.api_url,
             "api_key": self.api_key,
             "config": {
-                "communicate_same_level_agents": self.communicate_same_level,
-                "communicate_anyone": self.communicate_anyone,
                 "can_coding": self.can_coding
             },
             "slaves": [s.to_dict() for s in self.slaves]
@@ -58,29 +72,28 @@ def load_config(path: str) -> AgentConfig:
 
 def generate_template() -> str:
     template = {
-        "id": "root_master",
+        "id": "rootMaster",
         "model": DEFAULT_MODEL,
         "api_url": DEFAULT_API_URL,
         "api_key": "YOUR_MASTER_KEY",
         "config": {
-            "communicate_same_level_agents": True,
             "can_coding": True
         },
         "slaves": [
             {
-                "id": "master_1",
+                "id": "master1",
                 "api_key": "KEY_1",
                 "slaves": [
-                    {"id": "slave_1_1", "api_key": "KEY_1_1", "config": {"can_coding": True}},
-                    {"id": "slave_1_2", "api_key": "KEY_1_2", "config": {"can_coding": True}}
+                    {"id": "slave11", "api_key": "KEY_1_1", "config": {"can_coding": True}},
+                    {"id": "slave12", "api_key": "KEY_1_2", "config": {"can_coding": True}}
                 ]
             },
             {
-                "id": "master_2",
+                "id": "master2",
                 "api_key": "KEY_2",
                 "slaves": [
-                    {"id": "slave_2_1", "api_key": "KEY_2_1", "config": {"can_coding": True}},
-                    {"id": "slave_2_2", "api_key": "KEY_2_2", "config": {"can_coding": True}}
+                    {"id": "slave21", "api_key": "KEY_2_1", "config": {"can_coding": True}},
+                    {"id": "slave22", "api_key": "KEY_2_2", "config": {"can_coding": True}}
                 ]
             }
         ]

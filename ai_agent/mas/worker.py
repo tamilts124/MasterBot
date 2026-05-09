@@ -31,7 +31,7 @@ def main():
     bus = MessageBus(comm_dir)
     
     # PROOF OF LIFE: Announce presence to Master
-    bus.send_message(args.id, args.parent, {"status": "ready"}, msg_type="status_report")
+    bus.send_message(args.id, args.parent, {"status": "ready"})
     print(f"[Worker {args.id}] 📣 Sent READY signal to {args.parent}")
     
     print(f"[Worker {args.id}] Started. Reporting to {args.parent}")
@@ -58,9 +58,28 @@ def main():
 
     def broadcast_limit_reached(error_msg: str):
         print(f"[Worker {args.id}] Broadcast: LIMIT REACHED. Error: {error_msg}")
-        bus.send_message(args.id, args.parent, {"error": error_msg, "status": "died"}, msg_type="limit_reached")
-        for c in coworkers:
-            bus.send_message(args.id, c, f"Coworker {args.id} is down. Error: {error_msg}", msg_type="coworker_down")
+        hierarchy_str = os.environ.get("MAS_HIERARCHY")
+        agents = set()
+        if hierarchy_str:
+            try:
+                h_map = json.loads(hierarchy_str)
+                def extract(d):
+                    for k, v in d.items():
+                        agents.add(k)
+                        for child in v:
+                            extract(child)
+                extract(h_map)
+            except: pass
+        agents.update(coworkers)
+        agents.add(args.parent)
+        if args.id in agents:
+            agents.remove(args.id)
+            
+        for c in agents:
+            if c == args.parent:
+                bus.send_message(args.id, c, {"error": error_msg, "status": "died"}, need_reply=False)
+            else:
+                bus.send_message(args.id, c, f"Agent {args.id} is down. Error: {error_msg}", need_reply=False)
 
     def handle_emergency(msg_type: str, reason: str = "Unknown"):
         """Panic-Commit and Exit."""
@@ -82,8 +101,8 @@ def main():
         
         # Broadcast leadership
         for c in coworkers:
-            bus.send_message(args.id, c, {"new_master": args.id}, msg_type="new_master_announcement")
-        bus.update_status(args.id, "acting_master")
+            bus.send_message(args.id, c, {"new_master": args.id})
+        bus.update_agent_task_status(args.id, "inprogress")
 
         # Load hierarchy and start Master Cycle
         # Path is .. because worker is running in mas_workspace
@@ -133,7 +152,7 @@ def main():
         last_cycle_time = time.time()
         
         # 1. Master Watchdog (With Stale Detection)
-        master_status = bus.get_agent_status(args.parent)
+        master_status = bus.get_agent_task_status(args.parent)
         # FAST-TRACK PROMOTION: Assume dead if silent for > 10 seconds
         last_seen = master_status.get("last_update", 0)
         is_stale = (last_seen > 0 and time.time() - last_seen > 10)
@@ -154,13 +173,13 @@ def main():
                 # Check if I'm the ONLY survivor
                 living_peers = []
                 for peer in coworkers:
-                    if bus.get_agent_status(peer).get("status") not in ["died", "offline"]:
+                    if bus.get_agent_task_status(peer).get("status") not in ["died", "offline"]:
                         living_peers.append(peer)
                 
                 if not living_peers:
                     print(f"[Worker {args.id}] SOLE SURVIVOR DETECTED. Inheriting all workloads.")
                     # SOLE SURVIVOR LOGIC
-                    bus.update_status(args.id, "sole_survivor")
+                    bus.update_agent_task_status(args.id, "inprogress")
                     
                     manifest_path = comm_dir / "global_task_manifest.json"
                     if manifest_path.exists():
@@ -168,13 +187,13 @@ def main():
                             all_tasks = json.load(f)
                         
                         for sid, task_content in all_tasks.items():
-                            peer_status = bus.get_agent_status(sid)
+                            peer_status = bus.get_agent_task_status(sid)
                             if peer_status.get("status") != "completed":
                                 print(f"[Worker {args.id}] Inheriting task from fallen {sid}: {task_content[:30]}...")
                                 # Sequential Execution...
                     
                     print(f"[Worker {args.id}] All workloads finished. Performing FINAL PUSH.")
-                    bus.update_status(args.id, "completed")
+                    bus.update_agent_task_status(args.id, "completed")
                     sys.exit(0)
                 else:
                     print(f"[Worker {args.id}] MASTER {args.parent} DIED. I am the Alpha Slave. Promoting to Master...")
@@ -187,7 +206,8 @@ def main():
 
         # 2. Wait for messages
 
-        messages = bus.get_messages(args.id)
+        messages_grouped = bus.read_unread_messages(args.id)
+        messages = [m for msgs in messages_grouped.values() for m in msgs] if isinstance(messages_grouped, dict) else messages_grouped
         for msg in messages:
             if msg["type"] == "task_assignment":
                 task_data = msg["content"]
@@ -217,16 +237,17 @@ def main():
                         "error": "duplicate_task",
                         "task": task,
                         "already_assigned_to": duplicate_owner
-                    }, msg_type="duplicate_task_report")
+                    })
                     continue
 
                 print(f"[Worker {args.id}] Received task: {task[:50]}...")
                 
                 # 1. INSTANT ACK: Tell Master immediately that we've started to prevent re-assignment loops
-                bus.send_message(args.id, args.parent, {"task_id": task_id, "status": "acknowledged"}, msg_type="task_ack")
+                bus.reply_message(args.id, args.parent, {"task_id": task_id, "status": "acknowledged"}, msg["sno"])
                 
+                current_row_id = None
                 try:
-                    bus.update_status(args.id, "working", task)
+                    current_row_id = bus.update_agent_task_status(args.id, "inprogress", task)
                     log_history("task_start", {"id": task_id, "content": task})
 
                     # 2. BACKGROUND HEARTBEAT: Keep status alive while the AI brain is thinking
@@ -239,7 +260,7 @@ def main():
                             if time.time() - last_hb < 1:
                                 continue
                             last_hb = time.time()
-                            bus.update_status(args.id, "working", task)
+                            bus.update_agent_task_status(args.id, "inprogress", task, row_id=current_row_id)
 
                     
                     hb_thread = threading.Thread(target=heartbeat_worker, daemon=True)
@@ -251,8 +272,7 @@ def main():
                         work_dir=Path("."), # Already in mas_workspace
                         model_name=args.model,
                         ollama_url=args.ollama_url,
-                        ollama_key=args.ollama_key,
-                        use_mas_tools=True
+                        ollama_key=args.ollama_key
                     )
                     
                     print(f"[Worker {args.id}] 🚀 EXECUTING ASSIGNMENT: {task[:50]}...")
@@ -262,10 +282,12 @@ def main():
                     if isinstance(msg["content"], dict) and "failed_agent_id" in msg["content"]:
                         failed_id = msg["content"]["failed_agent_id"]
                         print(f"[Worker {args.id}] 📂 Loading history from failed agent {failed_id}...")
-                        history = bus.get_agent_history(failed_id, limit=20)
+                        history_grouped = bus.get_chat_history(failed_id)
+                        history_flat = [m for msgs in history_grouped.values() for m in msgs] if isinstance(history_grouped, dict) else history_grouped
+                        history = sorted(history_flat, key=lambda x: x["sno"])[-20:]
                         from langchain_core.messages import HumanMessage, AIMessage
                         msgs = []
-                        for m in reversed(history):
+                        for m in history:
                             content = str(m.get("content", ""))
                             if m.get("from") == failed_id:
                                 msgs.append(AIMessage(content=content))
@@ -281,8 +303,8 @@ def main():
                     hb_thread.join(timeout=1)
                     
                     print(f"[Worker {args.id}] ✅ TASK COMPLETE. Submitting report to Master.")
-                    bus.send_message(args.id, args.parent, {"task_id": task_id, "summary": summary}, msg_type="task_report")
-                    bus.update_status(args.id, "idle")
+                    bus.send_message(args.id, args.parent, {"task_id": task_id, "summary": summary})
+                    bus.update_agent_task_status(args.id, "completed", row_id=current_row_id)
                 
                 except Exception as e:
                     error_msg = str(e).lower()
@@ -293,7 +315,7 @@ def main():
                     
                     print(f"[Worker {args.id}] 🛑 ERROR: {e}. Immediate retry...")
                     broadcast_limit_reached(str(e))
-                    bus.update_status(args.id, "working", f"Retrying: {str(e)[:50]}")
+                    bus.update_agent_task_status(args.id, "inprogress", f"Retrying: {str(e)[:50]}")
                     continue
 
             elif msg["type"] == "takeover_command":
@@ -327,7 +349,7 @@ def main():
                 # Dynamically update the parent ID for future reporting
                 args.parent = new_master 
                 log_history("master_changed", new_master)
-                bus.send_message(args.id, args.parent, "Reporting for duty to new master.", msg_type="promotion_ack")
+                bus.send_message(args.id, args.parent, "Reporting for duty to new master.")
             
             elif msg["type"] == "coworker_down":
                 print(f"[Worker {args.id}] Alert: Coworker {msg['from']} reached limit.")

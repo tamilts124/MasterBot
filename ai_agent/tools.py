@@ -351,7 +351,7 @@ def report_to_master(summary: str, task_id: str) -> str:
     if not (agent_id and parent_id): return "[Error] MAS context missing."
     
     print(f"\n[REPORT] {agent_id} -> Master {parent_id}: {summary[:100]}...\n", flush=True)
-    get_bus().send_message(agent_id, parent_id, {"summary": summary, "task_id": task_id}, msg_type="task_report")
+    get_bus().send_message(agent_id, parent_id, {"summary": summary, "task_id": task_id})
     return f"[SUCCESS] Report for task '{task_id}' has been delivered to Master {parent_id}. This task is now officially REPORTED. Do NOT repeat this report."
 
 @tool
@@ -361,7 +361,7 @@ def ask_coworker(coworker_id: str, question: str) -> str:
     if not agent_id: return "[Error] MAS context missing."
     
     print(f"\n[COMM] {agent_id} -> Coworker {coworker_id}: {question[:100]}...\n", flush=True)
-    get_bus().send_message(agent_id, coworker_id, question, msg_type="text")
+    get_bus().send_message(agent_id, coworker_id, question)
     return f"Message sent to coworker {coworker_id}"
 
 @tool
@@ -376,72 +376,231 @@ def get_mas_identity() -> str:
 def list_team_members() -> str:
     """List the IDs of the direct Master, all Coworkers, and any active Slaves.
     The Root Master will see the entire recursive hierarchy of the squad."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id:
+        return "[Error] MAS context missing."
+        
     master = os.environ.get("PARENT_ID", "None")
-    coworkers = os.environ.get("COWORKERS", "None")
-    hierarchy = os.environ.get("MAS_HIERARCHY")
+    bus = get_bus()
+    coworkers = [c["agent_id"] for c in bus.get_my_coworkers(agent_id)]
+    slaves = [s["agent_id"] for s in bus.get_my_slaves(agent_id)]
     
+    output = f"Master: {master} | Coworkers: {', '.join(coworkers) if coworkers else 'None'} | Slaves: {', '.join(slaves) if slaves else 'None'}"
+    
+    hierarchy = bus.get_live_hierarchy()
     if hierarchy:
-        try:
-            h_map = json.loads(hierarchy)
-            return f"Full Squad Hierarchy: {json.dumps(h_map, indent=2)}\nMaster: {master} | Coworkers: {coworkers}"
-        except:
-            pass
+        return f"Full Live Squad Hierarchy: {json.dumps(hierarchy, indent=2)}\n{output}"
             
-    return f"Master: {master} | Coworkers: {coworkers}"
+    return output
 
 @tool
 def check_agent_status(agent_id: str) -> str:
     """Check the real-time status and current task of a specific agent."""
-    status = get_bus().get_agent_status(agent_id)
+    status = get_bus().get_agent_task_status(agent_id)
     return f"Agent {agent_id} Status: {status.get('status')} | Current Task: {status.get('current_task')}"
+
+@tool
+def check_all_agents_status() -> str:
+    """Check the real-time system state and current tasks of all agents in the squad."""
+    statuses = get_bus().get_all_agents_task_status()
+    if not statuses:
+        return "No agents found in the system."
+        
+    output = "--- All Agents Status ---\n"
+    for s in statuses:
+        output += f"\nAgent: {s['agent_id']} (Parent: {s['parent_id']})\n"
+        output += f"System State: {s['agent_status']} (Last Active: {s['last_active_time']})\n"
+        output += f"Task Status: {s.get('task_status', 'None')}\n"
+        output += f"Current Task: {s.get('task', 'None')[:200]}...\n"
+    
+    return _truncate_output(output)
 
 @tool
 def send_mas_message(to_id: str, message: str) -> str:
     """Send a coordination message to any direct Master, Coworker, or Slave."""
     agent_id = os.environ.get("AGENT_ID")
-    parent_id = os.environ.get("PARENT_ID")
-    coworkers = os.environ.get("COWORKERS", "").split(",")
-    comm_anyone = os.environ.get("COMMUNICATE_ANYONE", "false").lower() == "true"
-    comm_same = os.environ.get("COMMUNICATE_SAME_LEVEL", "true").lower() == "true"
-    
     if not agent_id: return "[Error] MAS context missing."
     
-    # Permission Logic
-    comm_same = os.environ.get("MAS_COMM_SAME_LEVEL", "true").lower() == "true"
-    comm_anyone = os.environ.get("MAS_COMM_ANYONE", "false").lower() == "true"
-    coworkers = os.environ.get("COWORKERS", "").split(",")
-    
-    is_master = to_id == parent_id
-    is_coworker = to_id in coworkers
-    
-    if not (is_master or is_coworker or comm_anyone):
-        return f"[Permission Denied] You cannot communicate with {to_id} unless 'communicate_anyone' is enabled."
-    
-    if is_coworker and not comm_same:
-        return f"[Permission Denied] Same-level communication is disabled for you."
-    
+    # Permission Logic removed: Anyone can communicate to anyone!
     print(f"\n[COMM] {agent_id} -> {to_id}: {message[:100]}...\n", flush=True)
-    get_bus().send_message(agent_id, to_id, message, msg_type="text")
+    get_bus().send_message(agent_id, to_id, message)
     return f"Message sent to {to_id}"
 
 @tool
-def inspect_agent_communication(agent_id: str) -> str:
-    """Read the last 10 coordination messages sent/received by a specific agent (Auditing)."""
-    history = get_bus().get_agent_history(agent_id, limit=10)
-    if not history: return f"No recorded communication for {agent_id}."
+def get_unread_messages() -> str:
+    """Retrieve all NEW unread messages addressed to you. This marks them as read."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id: return "[Error] MAS context missing."
     
-    output = f"--- Communication Log for {agent_id} ---\n"
-    for msg in history:
-        t = time.strftime('%H:%M:%S', time.localtime(msg['timestamp']))
-        output += f"[{t}] {msg['from']} -> {msg['to']} ({msg['type']}): {str(msg['content'])[:500]}\n"
+    bus = get_bus()
+    # Unread (marks as read)
+    unread_grouped = bus.read_unread_messages(agent_id)
+    unread = [m for msgs in unread_grouped.values() for m in msgs] if isinstance(unread_grouped, dict) else unread_grouped
+    
+    if not unread:
+        return "You have no new unread messages."
+        
+    output = "--- NEW UNREAD MESSAGES ---\n"
+    for m in unread:
+        output += f"  (Sno: {m['sno']}) FROM {m['from']}: {m.get('content')}\n"
+                
     return output
 
 @tool
-def contribute_to_knowledge(topic: str, insight: str) -> str:
+def get_unreplied_messages() -> str:
+    """Retrieve all messages addressed to you that still require a response."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id: return "[Error] MAS context missing."
+    
+    bus = get_bus()
+    unreplied = bus.read_unreplied_messages(agent_id)
+    
+    if not unreplied:
+        return "You have no unreplied messages."
+        
+    output = "--- UNREPLIED MESSAGES (REPLY REQUIRED) ---\n"
+    for m in unreplied:
+        output += f"  (Sno: {m['sno']}) FROM {m['from']}: {m.get('content')}\n"
+                
+    return output
+
+@tool
+def reply_mas_message(chat_sno: int, message: str) -> str:
+    """Reply to a specific message using its serial number (chat_sno)."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id: return "[Error] MAS context missing."
+    
+    bus = get_bus()
+    original_msg = bus.get_message_by_sno(chat_sno)
+    if not original_msg:
+        return f"[Error] Message with Sno {chat_sno} not found."
+    
+    # Reply to the sender of the original message
+    to_id = original_msg["from"]
+    bus.reply_message(agent_id, to_id, message, chat_sno)
+    return f"Reply sent to {to_id} for message {chat_sno}"
+
+@tool
+def inspect_agent_communication(agent_id: str) -> str:
+    """Read the complete chat history for a specific agent (Auditing)."""
+    history_grouped = get_bus().get_chat_history(agent_id)
+    if not history_grouped: return f"No recorded communication for {agent_id}."
+    
+    output = f"--- Complete Communication Log for {agent_id} ---\n"
+    for peer, msgs in history_grouped.items():
+        output += f"\n[Chat with {peer}]:\n"
+        for msg in msgs:
+            output += f"  (Sno: {msg['sno']}) {msg['from']} -> {msg['to']}: {str(msg.get('content', ''))[:500]}\n"
+    return output
+
+@tool
+def delegate_task(to_id: str, task_description: str) -> str:
+    """Assign a specific task to a slave and track it in the system database.
+    This both sends a message to the agent and updates their status to 'pending'."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id: return "[Error] MAS context missing."
+    
+    bus = get_bus()
+    # 1. Update Database
+    bus.update_agent_task_status(to_id, "pending", task_description, assigner_id=agent_id)
+    # 2. Send Message
+    bus.send_message(agent_id, to_id, task_description, need_reply=True)
+    
+    return f"[SUCCESS] Task delegated to {to_id}. It is now tracked in the system as 'pending' for that agent."
+
+@tool
+def handle_slave_failure(failed_agent_id: str) -> str:
+    """Initiate the emergency reassignment of all tasks from a failed/died agent to a healthy coworker.
+    Use this if you see an agent's status is 'died' or if they have gone silent for too long."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id: return "[Error] MAS context missing."
+    
+    bus = get_bus()
+    # Find healthy candidates (Slaves of this Master)
+    slaves = bus.get_my_slaves(agent_id)
+    healthy = [s["agent_id"] for s in slaves if s["agent_id"] != failed_agent_id and s["status"] != "died"]
+    
+    if not healthy:
+        print(f"[Master {agent_id}] ⚠️ NO HEALTHY COWORKERS. Taking over all tasks personally.")
+        # MASTER TAKEOVER: Move all tasks to SELF
+        bus.reassign_all_tasks(failed_agent_id, agent_id)
+        return f"[SUCCESS] No healthy coworkers found. All tasks from {failed_agent_id} have been moved to YOUR account ({agent_id}). You must complete them yourself."
+    
+    target_id = healthy[0]
+    
+    # Get the latest context for the notification
+    tasks = bus.get_agent_task_status(agent_id=failed_agent_id)
+    active_tasks = [t for t in tasks if t["status"] == "inprogress"]
+    task_to_resume = active_tasks[-1]["task"] if active_tasks else "Inherited responsibilities"
+    
+    # Determine if this is a Worker failure or a Master failure
+    failed_agent_info = bus.get_agents(failed_agent_id)
+    is_master_failure = bus.get_my_slaves(failed_agent_id) # If they had slaves, they were a Master
+    
+    if is_master_failure:
+        print(f"[Master {agent_id}] 👑 MASTER SUCCESSION: Drafting {target_id} to lead...")
+        # 1. Kill the drafted slave's current workload (Move it to the Root Master/Me)
+        bus.reassign_all_tasks(target_id, agent_id)
+        
+        # 2. Draft the slave to the new leadership role (Inherit the dead Master's squad)
+        bus.reassign_all_tasks(failed_agent_id, target_id)
+        bus.reassign_all_slaves(failed_agent_id, target_id)
+        
+        msg_text = (
+            f"URGENT: Your Master ({failed_agent_id}) has died. I have DRAFTED you to take his place immediately. "
+            f"Your previous tasks have been moved to ME. You are now the Leader of his squad. "
+            f"The primary mission you must now lead is: {task_to_resume}. "
+            "Acknowledge this promotion and start leading your new slaves."
+        )
+        bus.send_message(agent_id, target_id, msg_text, need_reply=True)
+        return f"[SUCCESS] Sacrificial Promotion complete. {target_id} has been drafted as the new Master. Their old tasks have been moved to you."
+    else:
+        # Simple Coworker Takeover (Worker failure)
+        bus.reassign_all_tasks(failed_agent_id, target_id)
+        msg_text = (
+            f"The agent {failed_agent_id} is died. I have assigned his tasks to you. "
+            f"Finish your current tasks first, then proceed with these inherited tasks: {task_to_resume}."
+        )
+        bus.send_message(agent_id, target_id, msg_text, need_reply=True)
+        return f"[SUCCESS] Tasks from {failed_agent_id} have been moved to coworker {target_id}."
+
+@tool
+def update_task_status(status: str, task_description: Optional[str] = None) -> str:
+    """Update your own current task status and description in the system database.
+    Use this to inform the squad and your Master about what you are currently doing.
+    Valid statuses: 'inprogress', 'completed', 'pending'."""
+    agent_id = os.environ.get("AGENT_ID")
+    if not agent_id: return "[Error] MAS context missing."
+    
+    get_bus().update_agent_task_status(agent_id, status, task_description)
+    return f"[SUCCESS] Your status has been updated to '{status}' in the system database."
+
+@tool
+def verify_task(agent_id: str, task_description: str, approved: bool, feedback: str = "") -> str:
+    """Review and verify a completed task from a slave.
+    If approved=True, the task is marked as officially 'verified' and closed.
+    If approved=False, the task is moved back to 'inprogress' and feedback is sent to the slave."""
+    my_id = os.environ.get("AGENT_ID")
+    if not my_id: return "[Error] MAS context missing."
+    
+    bus = get_bus()
+    if approved:
+        bus.update_agent_task_status(agent_id, "completed", task_description, is_verified=1, verified_by=my_id)
+        bus.send_message(my_id, agent_id, f"TASK APPROVED: Your work on '{task_description}' has been verified. Great job!")
+        return f"[SUCCESS] Task '{task_description}' for {agent_id} has been VERIFIED and CLOSED."
+    else:
+        # Revert to inprogress
+        bus.update_agent_task_status(agent_id, "inprogress", task_description, is_verified=0)
+        bus.send_message(my_id, agent_id, f"TASK REJECTED: Your work on '{task_description}' needs improvement. Feedback: {feedback}. Please rework and report again.")
+        return f"[REJECTED] Task '{task_description}' for {agent_id} has been sent back for rework with feedback."
+
+@tool
+def contribute_to_knowledge(topic: str, insight: str, relative_file_path: Optional[str] = None) -> str:
     """Add a significant architectural insight, file analysis, or mission finding to the shared knowledge base.
-    Other agents can query this instead of re-analyzing the same code/data."""
+    Other agents can query this instead of re-analyzing the same code/data.
+    If this insight is about a specific file, provide its relative path so the vault can track if the file changes."""
     agent_id = os.environ.get("AGENT_ID", "Unknown")
-    get_bus().update_knowledge(topic, insight, agent_id)
+    get_bus().update_knowledge(topic, insight, agent_id, relative_file_path)
     print(f"\n[KNOWLEDGE] {agent_id} contributed insight on '{topic}'\n", flush=True)
     return f"Knowledge vault updated with topic: {topic}"
 
@@ -452,24 +611,30 @@ def list_knowledge_topics() -> str:
     knowledge = get_bus().get_knowledge()
     if not knowledge:
         return "The knowledge vault is currently empty."
-    topics = "\n - ".join(knowledge.keys())
+    
+    topic_lines = []
+    for topic, data in knowledge.items():
+        path = data.get("relative_file_path")
+        if path:
+            topic_lines.append(f"{topic} (File: {path})")
+        else:
+            topic_lines.append(topic)
+            
+    topics = "\n - ".join(topic_lines)
     return f"SQUAD KNOWLEDGE VAULT TOPICS:\n - {topics}"
 
 @tool
-def query_knowledge(topic: Optional[str] = None) -> str:
+def query_knowledge(topic: Optional[str] = None, relative_file_path: Optional[str] = None) -> str:
     """Retrieve shared insights from the squad's knowledge vault. 
-    Use this to avoid redundant analysis of files or systems already understood by coworkers."""
-    knowledge = get_bus().get_knowledge(topic)
+    You can query by 'topic' or 'relative_file_path' to see if anyone has analyzed a file before you do.
+    If you provide neither, it returns everything."""
+    knowledge = get_bus().get_knowledge(topic=topic, relative_file_path=relative_file_path)
     if not knowledge:
-        return "No shared knowledge found for this topic."
-    
-    if topic:
-        res = f"Topic: {topic}\nContributor: {knowledge['contributor']}\nInsight: {knowledge['insight']}"
-        if knowledge.get("is_stale"):
-            res += "\n\n⚠️ WARNING: This insight is STALE. The file has been modified since this was written. Please re-analyze the file and use 'contribute_to_knowledge' to update this vault."
-        return res
+        return "No shared knowledge found for this query."
     
     output = "--- Shared Knowledge Vault ---\n"
     for t, data in knowledge.items():
-        output += f"- {t}: {data['insight'][:200]}... (by {data['contributor']})\n"
+        output += f"\nTopic: {t}\nContributor: {data.get('contributor_id', 'unknown')}\nLast Updated By: {data.get('updated_agent_id', 'unknown')}\nInsight: {data['insight']}\n"
+        if data.get("is_stale"):
+            output += "⚠️ WARNING: This insight is STALE. The file has been modified since this was written. Please re-analyze the file and use 'contribute_to_knowledge' to update this vault.\n"
     return output
