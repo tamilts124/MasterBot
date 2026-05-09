@@ -95,7 +95,7 @@ def main(argv: List[str] | None = None) -> None:
         else:
             msgs_to_send = [human_msg]
 
-        config = {"configurable": {"thread_id": "standalone_session"}}
+        config = {"configurable": {"thread_id": "standalone_session"}, "recursion_limit": 100}
         if streaming:
             if not quiet:
                 print("Agent: ", end="", flush=True)

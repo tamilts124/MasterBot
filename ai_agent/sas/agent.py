@@ -14,6 +14,7 @@ from langgraph.checkpoint.memory import MemorySaver
 # Import tools (Technical & WhatsApp, no MAS)
 from ..tools import (
     rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
+    start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
     git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages
 )
@@ -69,6 +70,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     
     tools.extend([
         rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
+        start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
         git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
         is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages
     ])

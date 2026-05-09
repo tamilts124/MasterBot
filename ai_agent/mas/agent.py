@@ -13,6 +13,7 @@ from langchain.agents import create_agent
 from langchain_community.agent_toolkits import FileManagementToolkit
 from ..tools import (
     rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
+    start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
     git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
     report_to_master, ask_coworker, get_mas_identity, list_team_members, 
@@ -138,6 +139,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
         report_to_master, ask_coworker, get_mas_identity, list_team_members, 
         check_agent_status, check_all_agents_status, send_mas_message, reply_mas_message,
         get_unread_messages, get_unreplied_messages, get_chat_history,
+        start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
         contribute_to_knowledge, query_knowledge, list_knowledge_topics,
         delegate_task, handle_slave_failure, update_task_status, verify_task,
         get_task_manifest, terminate_mission
@@ -206,7 +208,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "You are a highly capable autonomous developer agent in an elite squad.\n"
             "AVAILABLE TOOLS:\n"
             "- FILE OPS: 'read_file', 'write_file', 'list_directory', 'rename_file'\n"
-            "- EXECUTION: 'run_bat', 'run_bash', 'run_python'\n"
+            "- EXECUTION: 'run_bat', 'run_bash', 'run_python', 'start_interactive_process', 'list_interactive_processes', 'get_process_history', 'send_to_process', 'stop_interactive_process'\n"
             "- RESEARCH: 'web_search', 'fetch_url'\n"
             "- VERSION CONTROL: 'git_status', 'git_commit_and_push', 'git_pull', 'git_stash_save', 'git_stash_pop'\n"
             "- WHATSAPP: 'is_whatsapp_connected', 'send_whatsapp_message', 'get_whatsapp_last_messages'\n"
@@ -365,7 +367,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                 if "ToolMessage" in error_msg or "INVALID_CHAT_HISTORY" in error_msg:
                     print(f"\n[RECOVERY] Detected corrupt history for {agent_id}. Resetting session state for this cycle...\n")
                     # Fallback: Invoke without history for one cycle to break the loop
-                    result = agent.invoke({"messages": [HumanMessage(content=actual_input + "\n\nNOTE: Your previous tool call failed. Do not assume its result. Start fresh.")]}, {"configurable": {"thread_id": f"{thread_id}_recovery"}})
+                    result = agent.invoke({"messages": [HumanMessage(content=actual_input + "\n\nNOTE: Your previous tool call failed. Do not assume its result. Start fresh.")]}, {"configurable": {"thread_id": f"{thread_id}_recovery"}, "recursion_limit": 100})
                     return result["messages"][-1]
                 else:
                     raise e
