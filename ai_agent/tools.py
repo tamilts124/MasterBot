@@ -57,7 +57,12 @@ def _whatsapp_request(endpoint: str, method: str = "GET", data: dict = None):
 
 @tool
 def rename_file(old_path: str, new_path: str) -> str:
-    """Rename a file within the current working directory safely."""
+    """Rename or move a file within the current working directory.
+    This tool is safer than 'run_bash' for moving files as it performs path validation to ensure operations remain within the permitted workspace.
+    Args:
+        old_path: The current relative or absolute path of the file.
+        new_path: The desired new path or name for the file.
+    """
     try:
         old_resolved = Path(old_path).expanduser().resolve()
         new_resolved = Path(new_path).expanduser().resolve()
@@ -77,7 +82,11 @@ def rename_file(old_path: str, new_path: str) -> str:
 
 @tool
 def run_bat(script: str) -> str:
-    """Execute a Windows batch script and return its output."""
+    """Execute a Windows batch (.bat) script and capture its output.
+    Use this for Windows-specific automation, environment setup, or running legacy CMD commands.
+    Args:
+        script: The full multi-line text of the batch script to execute.
+    """
     if os.name != "nt":
         return "[Error] BAT execution is only supported on Windows."
     bat_path = None
@@ -99,7 +108,11 @@ def run_bat(script: str) -> str:
 
 @tool
 def run_bash(script: str) -> str:
-    """Execute a Bash script on Unix-like systems and return its output."""
+    """Execute a bash or system shell command and return the combined output.
+    This is the primary tool for Unix-like systems for file system operations, git commands, and running system utilities.
+    Args:
+        script: The command or script to run in the system shell.
+    """
     if os.name == "nt":
         return "[Error] Bash execution is not supported on Windows."
     bash_path = None
@@ -122,7 +135,11 @@ def run_bash(script: str) -> str:
 
 @tool
 def run_python(script: str) -> str:
-    """Execute a Python script using the same interpreter and return its output."""
+    """Execute a Python script in a separate process and return its output.
+    Use this for complex data processing, performing calculations, or executing independent Python logic.
+    Args:
+        script: The complete Python source code to execute.
+    """
     py_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".py", mode="w", encoding="utf-8") as tf:
@@ -142,7 +159,9 @@ def run_python(script: str) -> str:
 
 @tool
 def is_whatsapp_connected() -> str:
-    """Check if the WhatsApp API is currently connected to a session."""
+    """Verify if the WhatsApp automation bridge is active and authenticated.
+    Use this before attempting to send messages to ensure the system is ready.
+    """
     res = _whatsapp_request("/status")
     if res.get("status") == "success":
         connected = res.get("connected", False)
@@ -154,7 +173,11 @@ def is_whatsapp_connected() -> str:
 
 @tool
 def send_whatsapp_message(message: str) -> str:
-    """Send a WhatsApp message to the target JID specified during startup."""
+    """Send a text message to the pre-configured WhatsApp target JID.
+    Use this for high-priority alerts or status updates to the human operator.
+    Args:
+        message: The text content to send.
+    """
     config = _get_whatsapp_config()
     target_jid = config.get("target_jid")
     
@@ -175,7 +198,10 @@ def send_whatsapp_message(message: str) -> str:
 
 @tool
 def get_whatsapp_last_messages(count: int = 10) -> str:
-    """Retrieve the last N messages from the target WhatsApp history."""
+    """Retrieve the most recent conversation history from the target WhatsApp chat.
+    Args:
+        count: The number of messages to retrieve (default 10).
+    """
     config = _get_whatsapp_config()
     target_jid = config.get("target_jid")
     
@@ -205,7 +231,11 @@ def get_whatsapp_last_messages(count: int = 10) -> str:
 
 @tool
 def web_search(query: str, max_results: int = 5) -> str:
-    """Search the web for a query using DuckDuckGo and return top results."""
+    """Perform a live web search using DuckDuckGo to find information, documentation, or code examples.
+    Args:
+        query: The search term or question to find on the web.
+        max_results: The maximum number of search results to return (default 5).
+    """
     try:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=RuntimeWarning)
@@ -224,7 +254,11 @@ def web_search(query: str, max_results: int = 5) -> str:
 
 @tool
 def fetch_url(url: str) -> str:
-    """Fetch raw content from a URL and return it as text."""
+    """Download and read the raw text content of a specific web URL.
+    Use this to read documentation, API references, or source code from websites found during search.
+    Args:
+        url: The full HTTP/HTTPS URL to fetch.
+    """
     try:
         req = urllib.request.Request(
             url, 
@@ -238,7 +272,9 @@ def fetch_url(url: str) -> str:
 
 @tool
 def git_status() -> str:
-    """Check the current status of the git repository, including staged, unstaged, and untracked files."""
+    """Check the Git repository status to see modified files, staged changes, and current branch.
+    Always run this before committing or pulling to understand the current state of the workspace.
+    """
     try:
         # Verify we are in a git repository
         is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
@@ -252,7 +288,11 @@ def git_status() -> str:
 
 @tool
 def git_stash_save(message: str = "AI Agent: Auto-stash") -> str:
-    """Stash the current local changes to allow for a clean pull or context switch."""
+    """Temporarily hide current uncommitted changes to create a clean working directory.
+    Use this before pulling latest code or switching context when you have unfinished work.
+    Args:
+        message: A descriptive label for the stash entry.
+    """
     try:
         # Verify we are in a git repository
         is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
@@ -266,7 +306,9 @@ def git_stash_save(message: str = "AI Agent: Auto-stash") -> str:
 
 @tool
 def git_stash_pop() -> str:
-    """Pop the most recent stash back into the working directory."""
+    """Restore the most recently stashed changes back into the working directory.
+    Use this after a successful git pull or context switch to resume previous work.
+    """
     try:
         # Verify we are in a git repository
         is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
@@ -282,9 +324,10 @@ def git_stash_pop() -> str:
 
 @tool
 def git_pull() -> str:
-    """Pull the latest changes from the remote repository (origin main).
-    Use this if git_commit_and_push fails because the remote repository has changes.
-    If conflicts occur, you must manually resolve them by editing the files."""
+    """Download and merge the latest changes from the remote repository (origin main).
+    MANDATORY: Run this if `git_commit_and_push` fails due to 'non-fast-forward' errors.
+    This tool ensures your local workspace is synchronized with the latest squad contributions.
+    """
     try:
         # Verify we are in a git repository
         is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
@@ -305,9 +348,11 @@ def git_pull() -> str:
 
 @tool
 def git_commit_and_push(message: str) -> str:
-    """Commit all current changes and push them to the remote repository. 
-    Ensure you are in the root or a subdirectory of the git repository before calling this.
-    If this fails due to remote changes, you MUST use git_pull first."""
+    """Stage all current changes, commit them with a message, and upload to the remote 'origin main'.
+    Use this to share your progress with the team. 
+    Args:
+        message: A concise summary of the changes being pushed.
+    """
     try:
         # Verify we are in a git repository
         is_repo = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], capture_output=True, text=True)
@@ -352,7 +397,12 @@ def get_bus():
 
 @tool
 def report_to_master(summary: str, task_id: str) -> str:
-    """Report task completion and a summary of achievements to the Master agent."""
+    """Submit a final completion report to your superior Master agent.
+    This tool officially closes your assignment. Include a detailed summary of your results.
+    Args:
+        summary: The comprehensive results and achievements of the task.
+        task_id: The unique identifier of the task being reported as complete.
+    """
     agent_id = os.environ.get("AGENT_ID")
     parent_id = os.environ.get("PARENT_ID")
     if not (agent_id and parent_id): return "[Error] MAS context missing."
@@ -363,7 +413,12 @@ def report_to_master(summary: str, task_id: str) -> str:
 
 @tool
 def ask_coworker(coworker_id: str, question: str) -> str:
-    """Send a coordination request to a same-level coworker."""
+    """Send a collaborative query or coordination request to a same-level colleague.
+    Use this to request information or assistance from peers without bothering your Master.
+    Args:
+        coworker_id: The target agent ID to communicate with.
+        question: The request or question text.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
@@ -373,16 +428,20 @@ def ask_coworker(coworker_id: str, question: str) -> str:
 
 @tool
 def get_mas_identity() -> str:
-    """Retrieve the agent's own MAS ID, hierarchical level, and parent Master ID."""
+    """Retrieve your current operational parameters within the Multi-Agent System.
+    This includes your unique ID, your depth level in the hierarchy, and your assigned Master.
+    """
     agent_id = os.environ.get("AGENT_ID", "Unknown")
-    parent_id = os.environ.get("PARENT_ID", "None")
+    parent_raw = os.environ.get("PARENT_ID", "")
+    parent_id = "None (You are the ROOT MASTER)" if (not parent_raw or parent_raw == "" or parent_raw == "NoParentForYou") else parent_raw
     level = os.environ.get("AGENT_LEVEL", "0")
     return f"My ID: {agent_id} | My Level: {level} | My Master: {parent_id}"
 
 @tool
 def list_team_members() -> str:
-    """List the IDs and hierarchy of the squad. Use this ONLY to discover WHO is in your squad and who their Master is.
-    For real-time tasking and status, use 'check_all_agents_status' instead."""
+    """Discover the structure of your immediate squad, including coworkers and subordinates.
+    This tool provides a structural map of WHO you can collaborate with or delegate to.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id:
         return "[Error] MAS context missing."
@@ -414,7 +473,11 @@ def list_team_members() -> str:
 
 @tool
 def check_agent_status(agent_id: str) -> str:
-    """Check the real-time status and current task of a specific agent."""
+    """Retrieve the real-time operational status and current activity of a specific agent.
+    Use this to see if an agent is 'live' or 'died', and what specific task they are currently processing.
+    Args:
+        agent_id: The unique ID of the agent to inspect.
+    """
     tasks = get_bus().get_agent_task_status(agent_id)
     # Get the most recent task if available
     latest = tasks[-1] if tasks else {}
@@ -427,9 +490,11 @@ def check_agent_status(agent_id: str) -> str:
 
 @tool
 def get_task_manifest(agent_id: Optional[str] = None) -> str:
-    """Retrieve the master mission manifest from the database. This is the SOLE SOURCE OF TRUTH for all assignments.
-    If agent_id is provided, shows all tasks (past and present) for that specific agent.
-    If agent_id is None, shows all tasks for the entire squad hierarchy."""
+    """Read the central mission registry (SOE - Source of Everything) for the entire squad or a specific agent.
+    This provides a complete history of assignments, their current status, and verification state.
+    Args:
+        agent_id: Optional. Filter to show tasks only for this specific agent.
+    """
     bus = get_bus()
     if agent_id:
         tasks = bus.get_agent_task_status(agent_id)
@@ -456,13 +521,16 @@ def get_task_manifest(agent_id: Optional[str] = None) -> str:
         verified = " (Verified)" if t.get("is_verified") else " (Unverified)"
         status = t.get("status") or "unknown"
         task_str = t.get("task") or "None"
-        output += f"- {t['agent_id']}: [{status}] {task_str[:150]}{verified}\n"
+        t_id = t.get("id") or t.get("task_id") or "?"
+        output += f"- ID: {t_id} | {t['agent_id']}: [{status}] {task_str[:150]}{verified}\n"
     
     return output
 
 @tool
 def check_all_agents_status() -> str:
-    """Check the real-time system state and current tasks of all agents in the squad."""
+    """Perform a global vitality check on all agents in the Multi-Agent System.
+    This is the primary tool for Masters to monitor their entire hierarchy's health and task distribution.
+    """
     statuses = get_bus().get_all_agents_task_status()
     if not statuses:
         return "No agents found in the system."
@@ -492,7 +560,12 @@ def check_all_agents_status() -> str:
 
 @tool
 def send_mas_message(to_id: str, message: str) -> str:
-    """Send a coordination message to any direct Master, Coworker, or Slave."""
+    """Send a direct, private communication to any agent within the MAS.
+    Use this for ad-hoc requests, coordination, or sharing specific findings.
+    Args:
+        to_id: The target agent ID to message.
+        message: The text content of your message.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
@@ -503,7 +576,10 @@ def send_mas_message(to_id: str, message: str) -> str:
 
 @tool
 def get_unread_messages() -> str:
-    """Retrieve all NEW unread messages addressed to you. This marks them as read."""
+    """Check your incoming inbox and retrieve all new, unread messages. 
+    MANDATORY: Run this frequently to stay synchronized with Master directives and Coworker requests.
+    Reading messages via this tool marks them as 'read' in the system.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
@@ -531,7 +607,9 @@ def get_unread_messages() -> str:
 
 @tool
 def get_unreplied_messages() -> str:
-    """Retrieve all messages addressed to you that still require a response."""
+    """Identify which incoming messages in your history still require an explicit response from you.
+    Use this to ensure no coordination request or Master inquiry is left unanswered.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
@@ -557,7 +635,12 @@ def get_unreplied_messages() -> str:
 
 @tool
 def reply_mas_message(chat_sno: int, message: str) -> str:
-    """Reply to a specific message using its serial number (chat_sno)."""
+    """Submit a response to a specific message identified by its serial number (chat_sno).
+    This tool correctly links your reply to the original inquiry in the database.
+    Args:
+        chat_sno: The serial number of the message you are responding to.
+        message: Your response text.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
@@ -578,7 +661,11 @@ def reply_mas_message(chat_sno: int, message: str) -> str:
 
 @tool
 def inspect_agent_communication(agent_id: str) -> str:
-    """Read the complete chat history for a specific agent (Auditing)."""
+    """Audit the complete communication history of a specific agent.
+    Use this to understand the context of a task or to debug coordination failures.
+    Args:
+        agent_id: The ID of the agent whose history you wish to inspect.
+    """
     history_grouped = get_bus().get_chat_history(agent_id)
     if not history_grouped: return f"No recorded communication for {agent_id}."
     
@@ -591,9 +678,12 @@ def inspect_agent_communication(agent_id: str) -> str:
 
 @tool
 def delegate_task(to_id: str, task_description: str) -> str:
-    """Formally assign a task to a slave and record it in the mission database.
-    CRITICAL: Check 'get_task_manifest' first to ensure the agent is not already overloaded. 
-    Delegation automatically notifies the agent and sets their status to 'pending'."""
+    """Formally issue a new assignment to a subordinate agent.
+    This creates a persistent task record that must be completed and eventually verified by you.
+    Args:
+        to_id: The ID of the slave agent you are assigning the work to.
+        task_description: A detailed, actionable description of the work required.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
@@ -613,8 +703,11 @@ def delegate_task(to_id: str, task_description: str) -> str:
 
 @tool
 def handle_slave_failure(failed_agent_id: str) -> str:
-    """Initiate the emergency reassignment of all tasks from a failed/died agent to a healthy coworker.
-    Use this if you see an agent's status is 'died' or if they have gone silent for too long."""
+    """Execute the emergency succession and task reassignment protocol for a non-responsive or 'died' agent.
+    This tool can trigger 'Sacrificial Promotion' (drafting a slave to lead) or direct task takeover.
+    Args:
+        failed_agent_id: The ID of the agent who has failed or gone silent.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
@@ -668,21 +761,28 @@ def handle_slave_failure(failed_agent_id: str) -> str:
         return f"[SUCCESS] Tasks from {failed_agent_id} have been moved to coworker {target_id}."
 
 @tool
-def update_task_status(status: str, task_description: Optional[str] = None) -> str:
-    """Update your own current task status and description in the system database.
-    Use this to inform the squad and your Master about what you are currently doing.
-    Valid statuses: 'inprogress', 'completed', 'pending'."""
+def update_task_status(status: str, task_id: Optional[int] = None) -> str:
+    """Update your current task status and progress in the central mission registry.
+    Args:
+        status: Must be one of: 'inprogress', 'completed', or 'pending'.
+        task_id: The unique numeric ID of the task from the manifest.
+    """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
-    get_bus().update_agent_task_status(agent_id, status, task_description)
-    return f"[SUCCESS] Your status has been updated to '{status}' in the system database."
+    get_bus().update_agent_task_status(agent_id, status, row_id=task_id)
+    return f"[SUCCESS] Your status has been updated to '{status}' for task {task_id or 'latest'} in the system database."
 
 @tool
-def verify_task(agent_id: str, task_description: str, approved: bool, feedback: str = "") -> str:
-    """Perform a formal audit of a slave's work.
-    If approved=True: The task is CLOSED and marked as 'verified'.
-    If approved=False: The task is REJECTED and moved back to 'inprogress'. The slave is automatically notified to begin rework based on your feedback."""
+def verify_task(agent_id: str, task_id: int, approved: bool, feedback: str = "") -> str:
+    """Conduct a formal quality assurance audit on a subordinate's work.
+    If approved, the task is finalized. If rejected, the slave is automatically notified to perform rework.
+    Args:
+        agent_id: The ID of the slave whose work you are auditing.
+        task_id: The unique numeric ID of the task from the manifest.
+        approved: True to finalize/close the task, False to reject it.
+        feedback: Mandatory if rejected; explain exactly what needs to be fixed.
+    """
     my_id = os.environ.get("AGENT_ID")
     if not my_id: return "[Error] MAS context missing."
     
@@ -690,25 +790,29 @@ def verify_task(agent_id: str, task_description: str, approved: bool, feedback: 
     
     # --- SCREEN OBSERVABILITY ---
     v_icon = "✅" if approved else "❌"
-    print(f"\n{v_icon} VERIFICATION: {my_id} reviewed Task for {agent_id}")
+    print(f"\n{v_icon} VERIFICATION: {my_id} reviewed Task {task_id} for {agent_id}")
     print(f"   Result: {'APPROVED' if approved else 'REJECTED'}")
     print(f"   Feedback: {feedback[:100]}...\n")
     # ----------------------------
     if approved:
-        bus.update_agent_task_status(agent_id, "completed", task_description, is_verified=1, verified_by=my_id)
-        bus.send_message(my_id, agent_id, f"TASK APPROVED: Your work on '{task_description}' has been verified. Great job!")
-        return f"[SUCCESS] Task '{task_description}' for {agent_id} has been VERIFIED and CLOSED."
+        bus.update_agent_task_status(agent_id, "completed", is_verified=1, verified_by=my_id, row_id=task_id)
+        bus.send_message(my_id, agent_id, f"TASK APPROVED: Your work on task {task_id} has been verified. Great job!")
+        return f"[SUCCESS] Task {task_id} for {agent_id} has been VERIFIED and CLOSED."
     else:
         # Revert to inprogress
-        bus.update_agent_task_status(agent_id, "inprogress", task_description, is_verified=0)
-        bus.send_message(my_id, agent_id, f"TASK REJECTED: Your work on '{task_description}' needs improvement. Feedback: {feedback}. Please rework and report again.")
-        return f"[REJECTED] Task '{task_description}' for {agent_id} has been sent back for rework with feedback."
+        bus.update_agent_task_status(agent_id, "inprogress", is_verified=0, row_id=task_id)
+        bus.send_message(my_id, agent_id, f"TASK REJECTED: Your work on task {task_id} needs improvement. Feedback: {feedback}. Please rework and report again.")
+        return f"[REJECTED] Task {task_id} for {agent_id} has been sent back for rework with feedback."
 
 @tool
 def contribute_to_knowledge(topic: str, insight: str, relative_file_path: Optional[str] = None) -> str:
-    """Add a significant architectural insight, file analysis, or mission finding to the shared knowledge base.
-    Other agents can query this instead of re-analyzing the same code/data.
-    If this insight is about a specific file, provide its relative path so the vault can track if the file changes."""
+    """Record an important architectural discovery or code analysis into the collective squad memory.
+    Use this to save peers from repeating expensive research or analysis.
+    Args:
+        topic: A concise title for the insight.
+        insight: The detailed explanation or finding.
+        relative_file_path: Optional. If the insight relates to a specific file, include its relative path.
+    """
     agent_id = os.environ.get("AGENT_ID", "Unknown")
     # --- SCREEN OBSERVABILITY ---
     print(f"\n🧠 KNOWLEDGE ADDED by {agent_id}:")
@@ -771,3 +875,40 @@ def query_knowledge(topic: Optional[str] = None, relative_file_path: Optional[st
         if data.get("is_stale"):
             output += "⚠️ WARNING: This insight is STALE. The file has been modified since this was written. Please re-analyze the file and use 'contribute_to_knowledge' to update this vault.\n"
     return output
+    
+@tool
+def terminate_mission(reason: str) -> str:
+    """Terminate the entire Multi-Agent mission and shut down all agents.
+    MANDATORY: This tool is ONLY available to the ROOT MASTER. 
+    Before calling this, you MUST confirm that all tasks in the 'get_task_manifest' are 'completed' and 'verified'.
+    This tool will perform a final 'git_commit_and_push' before shutting down.
+    Args:
+        reason: A final summary of why the mission is being terminated (e.g., 'Project fully completed and verified').
+    """
+    agent_id = os.environ.get("AGENT_ID")
+    parent_id = os.environ.get("PARENT_ID", "")
+    
+    # Root Master is identified by "NoParentForYou"
+    is_root = parent_id == "NoParentForYou"
+    
+    if not is_root:
+        return f"[REJECTED] Termination failed. You are {agent_id} (Sub-Master under {parent_id}). ONLY the ROOT MASTER can terminate the mission."
+        
+    print(f"\n[SYSTEM] 🏁 MISSION TERMINATION INITIATED BY ROOT MASTER ({agent_id})")
+    print(f"   Reason: {reason}\n")
+    
+    # 1. Final Git Push
+    print("[SYSTEM] Performing final mission persistence (Git Push)...")
+    try:
+        # We can't call another tool directly easily without redundant imports, 
+        # so we implement the logic here or call the function.
+        # Since git_commit_and_push is a @tool, we can call it.
+        push_res = git_commit_and_push(f"🏁 Mission Complete: {reason}")
+        print(f"[SYSTEM] Git Push Status: {push_res}")
+    except Exception as e:
+        print(f"[Warning] Final git push failed: {e}")
+
+    print("[SYSTEM] Shutting down. Mission End.")
+    # Exit the entire process tree
+    os._exit(0)
+    return "Mission Terminated."

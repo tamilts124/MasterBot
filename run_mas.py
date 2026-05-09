@@ -133,7 +133,7 @@ def main():
         tor.prepare_proxies(all_ids)
     proxy = tor.get_proxy_for_agent(config.id, config.level, 0) if tor else None
     os.environ["AGENT_ID"] = config.id
-    os.environ["PARENT_ID"] = args.parent if args.parent else "USER"
+    os.environ["PARENT_ID"] = args.parent if args.parent else "NoParentForYou"
     
     if proxy:
         os.environ.update(setup_agent_env(proxy))

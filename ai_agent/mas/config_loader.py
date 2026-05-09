@@ -15,8 +15,9 @@ class AgentConfig:
             raise ValueError(f"Agent ID '{self.id}' contains invalid characters. Only alphanumeric characters (a-zA-Z0-9) are allowed.")
         self.model = data.get("model", DEFAULT_MODEL)
         self.api_url = data.get("api_url", DEFAULT_API_URL)
-        self.api_key = data.get("api_key", "")
-        self.api_keys = [k.strip() for k in self.api_key.split(",")] if "," in self.api_key else [self.api_key]
+        raw_key = data.get("api_key", "")
+        self.api_keys = [k.strip() for k in raw_key.split(",")] if "," in raw_key else [raw_key]
+        self.api_key = self.api_keys[0] if self.api_keys else None
         
         config = data.get("config", {})
         self.can_coding = config.get("can_coding", False)

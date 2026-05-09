@@ -208,13 +208,14 @@ class MessageBus:
                     a.parent_id, 
                     a.status as agent_status, 
                     a.last_active_time,
+                    ats.id as task_id,
                     ats.task, 
                     ats.status as task_status,
                     ats.updated_on as task_updated_on,
                     ats.assigner_id
                 FROM agents a
                 LEFT JOIN (
-                    SELECT agent_id, task, status, updated_on, assigner_id
+                    SELECT id, agent_id, task, status, updated_on, assigner_id
                     FROM agent_task_status 
                     WHERE id IN (
                         SELECT MAX(id) 

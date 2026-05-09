@@ -95,11 +95,14 @@ def main():
         print(f"[Worker {args.id}] 🧠 Thinking...")
         try:
             if not agent_brain:
+                all_keys = [k.strip() for k in args.ollama_key.split(",") if k.strip()]
+                first_key = all_keys[0] if all_keys else None
                 agent_brain = build_agent(
                     work_dir=Path("."),
                     model_name=args.model,
                     ollama_url=args.ollama_url,
-                    ollama_key=args.ollama_key
+                    ollama_key=first_key,
+                    api_keys=all_keys
                 )
             
             # The AgentWrapper handles situational awareness (Inbox + Tasks)

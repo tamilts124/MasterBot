@@ -26,10 +26,11 @@ class MasterAgent:
             f"URGENT: {header}You are the Root Master of a Multi-Agent Resilient System. Your goal: {goal}\n"
             f"{succession_clause}\n"
             "MANDATORY ARCHITECTURE PROTOCOL:\n"
-            "1. SLAVE COMMAND & MONITORING: If you have slaves, you must command them with clear, detailed requirements and actively monitor their progress.\n"
-            "2. REVIEW & FEEDBACK: When a worker reports their work, review it carefully. If there are issues, explain the corrections clearly so they can fix them.\n"
-            "3. PERSONAL RESPONSIBILITY: You may also be assigned direct coding tasks. Be attentive to your own coding responsibilities while monitoring the squad.\n"
-            "4. TOOL UTILIZATION: You have access to many powerful tools. Use them extensively to accomplish most of the work.\n\n"
+            "1. SLAVE COMMAND & INDIVIDUAL MONITORING: If you have slaves, you must command them with clear, detailed requirements. You are responsible for monitoring their progress INDIVIDUALLY by frequently checking 'get_task_manifest' and 'check_agent_status'.\n"
+            "2. TEAM COLLABORATION: Instruct your slaves to work together and communicate directly using 'ask_coworker' or 'send_mas_message'. They should not operate in silos; encourage them to share findings and coordinate their efforts.\n"
+            "3. REVIEW & FEEDBACK: When a worker reports their work, review it carefully. If there are issues, explain the corrections clearly so they can fix them.\n"
+            "4. PERSONAL RESPONSIBILITY: You may also be assigned direct coding tasks. Be attentive to your own coding responsibilities while monitoring the squad.\n"
+            "5. TOOL UTILIZATION: You have access to many powerful tools. Use them extensively to accomplish most of the work.\n\n"
             "You are the authority. LEAD."
         )
 
@@ -83,7 +84,7 @@ class MasterAgent:
                 "--level", str(slave_config.level),
                 "--model", slave_config.model,
                 "--ollama-url", slave_config.api_url,
-                "--ollama-key", slave_config.api_key
+                "--ollama-key", ",".join(slave_config.api_keys)
             ]
                 if not self.tor: cmd.append("--no-tor")
             
@@ -138,6 +139,7 @@ class MasterAgent:
                 model_name=self.config.model,
                 ollama_url=self.config.api_url,
                 ollama_key=self.config.api_key,
+                api_keys=self.config.api_keys,
                 is_master=True
             )
 
@@ -187,9 +189,8 @@ class MasterAgent:
                 print(f"[Master {self.config.id}] 🧠 Brain Error during leadership: {e}")
                 # Don't abdicate yet, let the loop retry unless it's fatal
                 if "status code: 429" in str(e).lower():
-                    # If we have no more keys, then we abdicate
-                    all_keys = [k.strip() for k in os.environ.get("API_KEYS", "").split(",") if k.strip()]
-                    if not all_keys or len(all_keys) <= 1: # Only 1 key left or none
+                    # If we have no more keys to rotate, then we abdicate
+                    if len(self.config.api_keys) <= 1:
                          raise e # This will trigger abdication in the outer runner
                 time.sleep(5)
                 continue
