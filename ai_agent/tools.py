@@ -396,12 +396,13 @@ def get_bus():
     return MessageBus(comm_path)
 
 @tool
-def report_to_master(summary: str, task_id: str) -> str:
-    """Submit a final completion report to your superior Master agent.
-    This tool officially closes your assignment. Include a detailed summary of your results.
+def report_to_master(summary: str, task_id: int) -> str:
+    """Submit the final completion results for a SPECIFIC assigned task to your Master.
+    MANDATORY: Use this ONLY when you have finished a task that was formally assigned to you in the 'get_task_manifest'.
+    Do NOT use this tool for general status updates or to say you are 'ready' for work.
     Args:
-        summary: The comprehensive results and achievements of the task.
-        task_id: The unique identifier of the task being reported as complete.
+        summary: The detailed results, achievements, and technical details of the completed work.
+        task_id: The unique numeric ID of the task you are closing.
     """
     agent_id = os.environ.get("AGENT_ID")
     parent_id = os.environ.get("PARENT_ID")
@@ -560,11 +561,11 @@ def check_all_agents_status() -> str:
 
 @tool
 def send_mas_message(to_id: str, message: str) -> str:
-    """Send a direct, private communication to any agent within the MAS.
-    Use this for ad-hoc requests, coordination, or sharing specific findings.
+    """Send a private message to another agent in the squad.
+    Use this to communicate with your Master, coordinate with coworkers, or give specific ad-hoc instructions to subordinates.
     Args:
-        to_id: The target agent ID to message.
-        message: The text content of your message.
+        to_id: The ID of the agent you want to message (e.g., 'rootMaster', 'slave1').
+        message: The text content of the message.
     """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
