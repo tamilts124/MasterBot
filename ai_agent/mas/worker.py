@@ -152,12 +152,14 @@ def main():
         last_cycle_time = time.time()
         
         # 1. Master Watchdog (With Stale Detection)
-        master_status = bus.get_agent_task_status(args.parent)
-        # FAST-TRACK PROMOTION: Assume dead if silent for > 10 seconds
-        last_seen = master_status.get("last_update", 0)
-        is_stale = (last_seen > 0 and time.time() - last_seen > 10)
+        master_info = bus.get_agents(args.parent)
+        if not master_info: continue
         
-        if master_status.get("status") in ["died", "offline"] or is_stale:
+        # FAST-TRACK PROMOTION: Assume dead if silent for > 15 seconds
+        last_seen = master_info.get("last_active_time", 0)
+        is_stale = (last_seen > 0 and time.time() - last_seen > 15)
+        
+        if master_info.get("status") in ["died", "offline"] or is_stale:
             # Election: Am I the alpha slave? (Calculated early to avoid NameError)
             all_candidates = sorted([args.id] + coworkers)
             alpha_id = all_candidates[0]
