@@ -198,13 +198,6 @@ class MessageBus:
                 
         return unreplied_messages
 
-    def get_agent_task_status(self, agent_id: str) -> Dict[str, Any]:
-        with self._get_conn() as conn:
-            cursor = conn.execute("SELECT * FROM agent_task_status WHERE agent_id = ? ORDER BY updated_on DESC LIMIT 1", (agent_id,))
-            row = cursor.fetchone()
-            if row:
-                return dict(row)
-        return {"status": "unknown"}
 
     def get_all_agents_task_status(self) -> List[Dict[str, Any]]:
         """Retrieve the current state and latest task status for all agents."""

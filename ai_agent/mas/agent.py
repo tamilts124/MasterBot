@@ -6,12 +6,12 @@ from typing import Any, List, Dict, Optional
 from pathlib import Path
 
 from langchain_ollama import ChatOllama
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langgraph.prebuilt import create_react_agent
 from langgraph.checkpoint.memory import MemorySaver
 from langchain.agents import create_agent
 from langchain_community.agent_toolkits import FileManagementToolkit
-from .tools import (
+from ..tools import (
     rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
     git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
@@ -37,16 +37,21 @@ class TenaciousOllama(ChatOllama):
                 idle_count_str = ""
                 try:
                     bus = get_bus()
+                    bus.update_agent(agent_id) # Heartbeat during generation attempts
                     my_slaves = bus.get_my_slaves(agent_id)
                     if my_slaves:
                         # Only show if this agent actually has slaves
-                        live_slaves = [s for s in my_slaves if s["status"] == "live"]
                         idle_ids = []
-                        for s in live_slaves:
-                            s_tasks = bus.get_agent_task_status(agent_id=s["agent_id"])
-                            if not [t for t in s_tasks if t["status"] in ["pending", "inprogress"]]:
-                                idle_ids.append(s["agent_id"])
-                        idle_count_str = f" | 💤 Idle: {len(idle_ids)}"
+                        for s in my_slaves:
+                            if not s or not isinstance(s, dict): continue
+                            s_id = s.get("agent_id")
+                            if not s_id: continue
+                            
+                            s_tasks = bus.get_agent_task_status(agent_id=s_id)
+                            if s_tasks is not None and not [t for t in s_tasks if t and isinstance(t, dict) and t.get("status") in ["pending", "inprogress"]]:
+                                idle_ids.append(s_id)
+                        if idle_ids:
+                            idle_count_str = f" | 💤 Idle: {len(idle_ids)}"
                 except: pass # Don't crash if DB is locked or bus fails
                 
                 print(f"[Brain {agent_id}] Starting generation (Proxy: {active_proxy}, Attempt: {attempt + 1}{idle_count_str})")
@@ -223,7 +228,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             
             # Inbox check: Enforce "Read Before Work" policy
             try:
-                from .mas.communication import MessageBus
+                from .communication import MessageBus
                 bus = MessageBus(work_dir / ".mas")
                 
                 # Ping the agent as active right before generating the prompt
@@ -260,7 +265,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                 # 2. Verification Awareness: Do I have unverified work from slaves?
                 if is_master:
                     all_slave_tasks = bus.get_agent_task_status(assigner_id=agent_id)
-                    unverified = [t for t in all_slave_tasks if t["status"] == "completed" and not t.get("is_verified")]
+                    unverified = [t for t in (all_slave_tasks or []) if isinstance(t, dict) and t.get("status") == "completed" and not t.get("is_verified")]
                     
                     if unverified:
                         v_alert = "\n\n[VERIFICATION ALERT] "
@@ -275,23 +280,25 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                 # 3. Squad Capacity Alert: Do I have idle slaves?
                 if is_master:
                     my_slaves = bus.get_my_slaves(agent_id)
-                    live_slaves = [s["agent_id"] for s in my_slaves if s["status"] == "live"]
-                    all_tasks = bus.get_agent_task_status()
-                    
-                    idle_slaves = []
-                    for sid in live_slaves:
-                        active_tasks = [t for t in all_tasks if t["agent_id"] == sid and t["status"] in ["pending", "inprogress"]]
-                        if not active_tasks:
-                            idle_slaves.append(sid)
-                    
-                    if idle_slaves:
-                        idle_alert = f"\n\n[SQUAD IDLE ALERT] The following agents are LIVE but have NO tasks: {', '.join(idle_slaves)}. "
-                        idle_alert += "They are wasting resources. You MUST use 'delegate_task' to assign them new work immediately to maintain squad momentum."
+                    if my_slaves:
+                        idle_slaves = []
+                        for s in my_slaves:
+                            if not s or not isinstance(s, dict): continue
+                            sid = s.get("agent_id")
+                            if not sid: continue
+                            
+                            s_tasks = bus.get_agent_task_status(agent_id=sid)
+                            if s_tasks is not None and not [t for t in s_tasks if isinstance(t, dict) and t.get("status") in ["pending", "inprogress"]]:
+                                idle_slaves.append(sid)
                         
-                        if isinstance(input_data, dict) and "input" in input_data:
-                            input_data["input"] += idle_alert
-                        else:
-                            input_data = str(input_data) + idle_alert
+                        if idle_slaves:
+                            idle_alert = f"\n\n[SQUAD IDLE ALERT] The following agents are LIVE but have NO tasks: {', '.join(idle_slaves)}. "
+                            idle_alert += "They are wasting resources. You MUST use 'delegate_task' to assign them new work immediately to maintain squad momentum."
+                            
+                            if isinstance(input_data, dict) and "input" in input_data:
+                                input_data["input"] += idle_alert
+                            elif input_data:
+                                input_data = str(input_data) + idle_alert
 
                 # 4. Proactive Knowledge Manifest
                 knowledge = bus.get_knowledge()
@@ -319,6 +326,21 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
 
             # Invoke the agent graph with history resilience
             try:
+                # SELF-HEALING: Check if history is corrupt before invoking
+                try:
+                    state = agent.get_state(config)
+                    history = state.values.get("messages", [])
+                    if history and isinstance(history[-1], AIMessage) and history[-1].tool_calls:
+                        repairs = []
+                        for tc in history[-1].tool_calls:
+                            repairs.append(ToolMessage(
+                                tool_call_id=tc.get('id', 'unknown'),
+                                content=f"The tool '{tc.get('name')}' was interrupted. Please proceed."
+                            ))
+                        agent.update_state(config, {"messages": repairs})
+                except:
+                    pass
+
                 result = agent.invoke({"messages": [HumanMessage(content=actual_input)]}, config)
                 # Return the last message content to maintain compatibility
                 return result["messages"][-1]

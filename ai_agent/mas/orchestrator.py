@@ -9,7 +9,7 @@ from typing import List, Dict, Any
 from .config_loader import AgentConfig
 from .communication import MessageBus
 from .network_manager import TorManager, setup_agent_env
-from ..agent import TenaciousOllama, build_agent, extract_reply
+from ai_agent.mas.agent import build_agent, extract_reply
 import re
 
 class MasterAgent:
@@ -43,6 +43,7 @@ class MasterAgent:
         self.slave_processes: Dict[str, subprocess.Popen] = {}
         self.reassignment_counts: Dict[str, int] = {} # task_description -> count
         self.abdicated = False
+        self.master_row_id = None
         self.project_root = str(Path(__file__).parent.parent.parent.absolute())
         
         existing_pythonpath = os.environ.get("PYTHONPATH", "")
@@ -160,7 +161,7 @@ class MasterAgent:
                     
                     # AUTOMATIC RECOVERY: Find tasks and reassign before the next brain cycle
                     tasks = self.bus.get_agent_task_status(agent_id=slave_id)
-                    active = [t for t in tasks if t["status"] == "inprogress"]
+                    active = [t for t in (tasks or []) if isinstance(t, dict) and t.get("status") == "inprogress"]
                     task_to_resume = active[-1]["task"] if active else None
                     
                     self.handle_slave_failure(slave_id, task_to_resume)
@@ -180,12 +181,23 @@ class MasterAgent:
             )
             
             print(f"[Master {self.config.id}] 🧠 COMMANDER is leading...")
-            self.master_agent.invoke({"input": prompt})
+            try:
+                self.master_agent.invoke({"input": prompt})
+            except Exception as e:
+                print(f"[Master {self.config.id}] 🧠 Brain Error during leadership: {e}")
+                # Don't abdicate yet, let the loop retry unless it's fatal
+                if "status code: 429" in str(e).lower():
+                    # If we have no more keys, then we abdicate
+                    all_keys = [k.strip() for k in os.environ.get("API_KEYS", "").split(",") if k.strip()]
+                    if not all_keys or len(all_keys) <= 1: # Only 1 key left or none
+                         raise e # This will trigger abdication in the outer runner
+                time.sleep(5)
+                continue
 
             # 3. Check for Mission Completion
             all_tasks = self.bus.get_agent_task_status(assigner_id=self.config.id)
             if all_tasks: # Only complete if we actually assigned something
-                incomplete = [t for t in all_tasks if t["status"] != "completed"]
+                incomplete = [t for t in all_tasks if isinstance(t, dict) and t.get("status") != "completed"]
                 if not incomplete:
                     print(f"[Master {self.config.id}] MISSION COMPLETE. All sub-tasks verified as COMPLETED in Database.")
                     self.bus.update_agent_task_status(self.config.id, "completed", row_id=self.master_row_id)

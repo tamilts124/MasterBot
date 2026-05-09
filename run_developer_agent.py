@@ -132,7 +132,7 @@ def main():
 
         # Prepare command to run the agent
         agent_cmd = [
-            sys.executable, "-m", "ai_agent.main",
+            sys.executable, "-m", "ai_agent.sas.main",
             "--workdir", str(workspace.resolve()),
             "--model", args.model,
             "--ollama-url", args.ollama_url,

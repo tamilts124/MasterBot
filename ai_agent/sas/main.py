@@ -66,8 +66,7 @@ def main(argv: List[str] | None = None) -> None:
         print(f" - WhatsApp: {whatsapp_jid if whatsapp_jid else 'DISABLED'}")
         if whatsapp_jid:
             print(f" - WA URL:   {whatsapp_url}")
-        if ollama_url:
-            print(f" - Ollama URL: {ollama_url}")
+        print(f" - Ollama URL: {ollama_url if ollama_url else 'http://localhost:11434 (default)'}")
         print(f" - Max Tool Out: {max_tool_output}")
         print(f" - Ollama Ctx: {ollama_ctx}")
         if single_prompt:
@@ -96,16 +95,20 @@ def main(argv: List[str] | None = None) -> None:
         else:
             msgs_to_send = [human_msg]
 
+        config = {"configurable": {"thread_id": "standalone_session"}}
         if streaming:
             if not quiet:
                 print("Agent: ", end="", flush=True)
             try:
                 full_reply = ""
-                for chunk in agent.stream({"messages": msgs_to_send}):
-                    text = extract_reply(chunk)
-                    if text:
-                        print(text, end="", flush=True)
-                        full_reply += text
+                for event in agent.stream({"messages": msgs_to_send}, config=config):
+                    # LangGraph events are dicts like {'agent': {'messages': [...]}} or {'tools': {...}}
+                    for node_name, node_data in event.items():
+                        if "messages" in node_data:
+                            last_msg = node_data["messages"][-1]
+                            if isinstance(last_msg, AIMessage) and last_msg.content:
+                                print(last_msg.content, end="", flush=True)
+                                full_reply += last_msg.content
                 if not quiet:
                     print()
                 if use_history:
@@ -119,7 +122,7 @@ def main(argv: List[str] | None = None) -> None:
                 return False
         else:
             try:
-                result = agent.invoke({"messages": msgs_to_send})
+                result = agent.invoke({"messages": msgs_to_send}, config=config)
                 reply_text = extract_reply(result) or ("[No response received]" if not quiet else "")
                 if not quiet:
                     print(f"Agent: {reply_text}\n")

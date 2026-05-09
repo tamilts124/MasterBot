@@ -445,14 +445,18 @@ def get_task_manifest(agent_id: Optional[str] = None) -> str:
     print(f"\n📋 {label.upper()} (SCREEN ONLY)")
     for t in tasks:
         v_icon = "✅" if t.get("is_verified") else "⏳"
-        print(f" [{t['status'].upper()}] {v_icon} {t['agent_id']}: {t['task'][:100]}...")
+        status = t.get("status") or "unknown"
+        task_str = t.get("task") or "None"
+        print(f" [{status.upper()}] {v_icon} {t['agent_id']}: {task_str[:100]}...")
     print()
     # ----------------------------
 
     output = f"--- {label} ---\n"
     for t in tasks:
         verified = " (Verified)" if t.get("is_verified") else " (Unverified)"
-        output += f"- {t['agent_id']}: [{t['status']}] {t['task'][:150]}{verified}\n"
+        status = t.get("status") or "unknown"
+        task_str = t.get("task") or "None"
+        output += f"- {t['agent_id']}: [{status}] {task_str[:150]}{verified}\n"
     
     return output
 
@@ -469,18 +473,20 @@ def check_all_agents_status() -> str:
     for s in statuses:
         stat = s.get("agent_status", "unknown")
         icon = "🟢" if stat == "live" else "🔴"
-        print(f" {icon} {s['agent_id']} (Parent: {s['parent_id']})")
+        task_str = s.get("task") or "None"
+        print(f" {icon} {s['agent_id']} (Parent: {s.get('parent_id', 'None')})")
         print(f"    - Task Status: {s.get('task_status', 'None')}")
-        print(f"    - Current Task: {s.get('task', 'None')[:100]}...")
+        print(f"    - Current Task: {task_str[:100]}...")
     print("="*40 + "\n")
     # ----------------------------
 
     output = "--- All Agents Status ---\n"
     for s in statuses:
-        output += f"\nAgent: {s['agent_id']} (Parent: {s['parent_id']})\n"
+        task_str = s.get("task") or "None"
+        output += f"\nAgent: {s['agent_id']} (Parent: {s.get('parent_id', 'None')})\n"
         output += f"System State: {s['agent_status']} (Last Active: {s['last_active_time']})\n"
         output += f"Task Status: {s.get('task_status', 'None')}\n"
-        output += f"Current Task: {s.get('task', 'None')[:200]}...\n"
+        output += f"Current Task: {task_str[:200]}...\n"
     
     return _truncate_output(output)
 
@@ -627,7 +633,7 @@ def handle_slave_failure(failed_agent_id: str) -> str:
     
     # Get the latest context for the notification
     tasks = bus.get_agent_task_status(agent_id=failed_agent_id)
-    active_tasks = [t for t in tasks if t["status"] == "inprogress"]
+    active_tasks = [t for t in (tasks or []) if isinstance(t, dict) and t.get("status") == "inprogress"]
     task_to_resume = active_tasks[-1]["task"] if active_tasks else "Inherited responsibilities"
     
     # Determine if this is a Worker failure or a Master failure

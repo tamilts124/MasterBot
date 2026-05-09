@@ -13,7 +13,7 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from ai_agent.mas.communication import MessageBus
-from ai_agent.agent import build_agent, extract_reply
+from ai_agent.mas.agent import build_agent, extract_reply
 
 def main():
     parser = argparse.ArgumentParser(description="MARS Autonomous Worker")
@@ -53,15 +53,26 @@ def main():
             continue
         last_cycle_time = time.time()
         
-        # 1. Master Watchdog (With Stale Detection)
+        # 1. Master Watchdog (With Dynamic Succession Discovery)
         master_info = bus.get_agents(args.parent)
-        if not master_info:
-            print(f"[Worker {args.id}] ⚠️ CANNOT FIND MASTER {args.parent} IN DB.")
-            time.sleep(5)
-            continue
+        current_parent = args.parent
+        
+        if not master_info or master_info.get("status") == "died":
+            # If our parent died, we might have been reassigned!
+            my_info = bus.get_agents(args.id)
+            new_parent = my_info.get("parent_id")
+            if new_parent and new_parent != args.parent:
+                print(f"[Worker {args.id}] 🔄 Parent Succession: Moving from {args.parent} to {new_parent}")
+                args.parent = new_parent # Update context
+                master_info = bus.get_agents(new_parent)
+                current_parent = new_parent
+            elif not master_info:
+                print(f"[Worker {args.id}] ⚠️ CANNOT FIND MASTER {current_parent} IN DB.")
+                time.sleep(5)
+                continue
             
         last_seen = master_info.get("last_active_time", 0)
-        is_stale = (last_seen > 0 and time.time() - last_seen > 30)
+        is_stale = (last_seen > 0 and time.time() - last_seen > 120) # 2 minute grace period for slow LLMs
         
         if master_info.get("status") == "died" or is_stale:
             # Election Logic
