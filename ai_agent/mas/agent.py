@@ -24,11 +24,19 @@ from ..tools import (
 )
 
 class TenaciousOllama(ChatOllama):
+    all_api_keys: List[str] = []
+
+    def __init__(self, *args, api_keys_str: Optional[str] = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if api_keys_str:
+            self.all_api_keys = [k.strip() for k in api_keys_str.split(",") if k.strip()]
+
     def _generate(self, messages: List[BaseMessage], stop: Optional[List[str]] = None, **kwargs):
         agent_id = os.environ.get("AGENT_ID", "Agent")
         active_proxy = os.environ.get("HTTP_PROXY", "DIRECT")
-        all_keys = [k.strip() for k in os.environ.get("API_KEYS", "").split(",") if k.strip()]
-        max_retries = max(3, len(all_keys))
+        all_keys = self.all_api_keys
+        max_transient_retries = 5
+        max_retries = max(len(all_keys), max_transient_retries)
         retry_delay = 5
         
         for attempt in range(max_retries):
@@ -56,26 +64,41 @@ class TenaciousOllama(ChatOllama):
                 
                 print(f"[Brain {agent_id}] Starting generation (Proxy: {active_proxy}, Attempt: {attempt + 1}{idle_count_str})")
                 
-                all_keys = os.environ.get("API_KEYS", "").split(",")
-                all_keys = [k.strip() for k in all_keys if k.strip()]
+                all_keys = self.all_api_keys
                 
                 # Rotate keys if possible
                 current_key = all_keys[attempt % len(all_keys)] if all_keys else ""
                 if hasattr(self, "client_kwargs") and "headers" in self.client_kwargs:
                     self.client_kwargs["headers"]["Authorization"] = f"Bearer {current_key}"
+                    # Force rebuild client with new headers
+                    if hasattr(self, "_client"): self._client = None
+                    if hasattr(self, "_async_client"): self._async_client = None
                 
                 # Log messages for observability
                 self._log_monologue(agent_id, messages)
                 
                 return super()._generate(messages, stop=stop, **kwargs)
             except Exception as e:
-                # ...
-                # Handle status code -1 (internal server error) or 429 (limit reached) and other transient errors
                 error_str = str(e)
-                if attempt < max_retries - 1 and ("-1" in error_str or "429" in error_str or "limit reached" in error_str.lower() or "Internal Server Error" in error_str or "503" in error_str or "peer closed" in error_str.lower() or "incomplete chunked read" in error_str.lower()):
-                    print(f"[Brain {agent_id}] ⚠️ Usage Limit or Transient Error: {e}. Rotating key and retrying INSTANTLY (Rule #1)... ")
-                    pass # NO SLEEP - Rule #1 Compliance
-                    retry_delay *= 2 # Exponential backoff
+                # Handle status code -1 (internal server error) or 429 (limit reached) and other transient errors
+                is_rate_limit = "429" in error_str or "limit reached" in error_str.lower()
+                is_transient = "-1" in error_str or "Internal Server Error" in error_str or "503" in error_str or "peer closed" in error_str.lower() or "incomplete chunked read" in error_str.lower() or "timeout" in error_str.lower()
+                
+                # Determine retry eligibility
+                # 1. Rate Limit: Only retry as many times as we have keys to rotate
+                # 2. Transient Error: Retry more ("for sometimes")
+                
+                if is_rate_limit:
+                    can_retry = (attempt < len(self.all_api_keys) - 1)
+                    label = "Usage Limit"
+                elif is_transient:
+                    can_retry = (attempt < max_transient_retries - 1)
+                    label = "Server/Transient Error"
+                else:
+                    can_retry = False
+                
+                if can_retry:
+                    print(f"[Brain {agent_id}] ⚠️ {label}: {e}. Rotating key and retrying INSTANTLY (Rule #1)... ")
                     continue
                 raise e
 
@@ -152,6 +175,8 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     }
     if ollama_url:
         ollama_kwargs["base_url"] = ollama_url
+    
+    ollama_kwargs["api_keys_str"] = ollama_key
     
     proxy = os.environ.get("HTTP_PROXY") or os.environ.get("HTTPS_PROXY")
     
