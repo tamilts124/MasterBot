@@ -252,24 +252,31 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                     
                 bus.update_agent(agent_id)
                 
-                # 1. Mandatory Inbox Priority
+                # 1. situational Awareness: Inbox & Tasks
                 counts = bus.get_unread_messages_count(agent_id)
                 unread = counts["unread"]
                 unreplied = counts["unreplied"]
                 
+                # Get own task counts
+                my_tasks = bus.get_agent_task_status(agent_id=agent_id) or []
+                pending_count = len([t for t in my_tasks if t.get("status") == "pending"])
+                inprogress_count = len([t for t in my_tasks if t.get("status") == "inprogress"])
+                completed_count = len([t for t in my_tasks if t.get("status") == "completed"])
+
+                alert = "\n\n[SITUATIONAL AWARENESS]"
+                alert += f"\n- Messages: {unread} NEW, {unreplied} UNREPLIED (Require Action)"
+                alert += f"\n- My Tasks: {pending_count} PENDING, {inprogress_count} IN-PROGRESS, {completed_count} COMPLETED"
+                
                 if unread or unreplied:
-                    alert = "\n\n[INBOX ALERT] "
-                    if unread:
-                        alert += f"You have {unread} NEW messages. "
-                    if unreplied:
-                        alert += f"You have {unreplied} UNREPLIED messages that REQUIRE a response. "
-                    
-                    alert += "You MUST use 'get_unread_messages' to read new ones and 'get_unreplied_messages' to see what needs a response. Then use 'reply_mas_message' or 'send_mas_message' to respond immediately before continuing your work."
-                    
-                    if isinstance(input_data, dict) and "input" in input_data:
-                        input_data["input"] += alert
-                    else:
-                        input_data = str(input_data) + alert
+                    alert += "\n[INBOX ALERT] You MUST use 'get_unread_messages' and 'get_unreplied_messages' immediately."
+                
+                if inprogress_count > 0:
+                    alert += f"\n[FOCUS] You are currently working on {inprogress_count} task(s). Finish them before taking more work."
+
+                if isinstance(input_data, dict) and "input" in input_data:
+                    input_data["input"] += alert
+                else:
+                    input_data = str(input_data) + alert
                 
                 # 2. Verification Awareness: Do I have unverified work from slaves?
                 if is_master:
