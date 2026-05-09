@@ -680,7 +680,9 @@ def inspect_agent_communication(agent_id: str) -> str:
 @tool
 def delegate_task(to_id: str, task_description: str) -> str:
     """Formally issue a new assignment to a subordinate agent.
-    This creates a persistent task record that must be completed and eventually verified by you.
+    MANDATORY: Check 'get_task_manifest' before delegating. Do NOT assign a task that the agent is already working on (pending/inprogress). 
+    Re-assigning the same task disturbs the agent's focus; you MUST wait for their official reply, acknowledgement, or completion.
+    You may assign multiple different tasks, but understand that the agent will process them sequentially (one by one).
     Args:
         to_id: The ID of the slave agent you are assigning the work to.
         task_description: A detailed, actionable description of the work required.
@@ -689,6 +691,20 @@ def delegate_task(to_id: str, task_description: str) -> str:
     if not agent_id: return "[Error] MAS context missing."
     
     bus = get_bus()
+    
+    # --- CHECK FOR DUPLICATE TASKS ---
+    all_tasks = bus.get_agent_task_status(agent_id=to_id)
+    if all_tasks:
+        desc_new = task_description.strip().lower()
+        duplicates = [
+            t for t in all_tasks 
+            if isinstance(t, dict) 
+            and t.get("status") in ["pending", "inprogress"]
+            and t.get("task", "").strip().lower() == desc_new
+        ]
+        if duplicates:
+            return f"[REJECTED] Task already assigned to {to_id} and is currently {duplicates[0]['status']}. Do not send redundant assignments."
+    # --------------------------------
     
     # --- SCREEN OBSERVABILITY ---
     print(f"\n🤝 DELEGATION: {agent_id} -> {to_id}")

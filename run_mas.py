@@ -73,17 +73,21 @@ def main():
         authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
         
         if not (root_dir / ".git").exists():
-            print(f"📥 Initializing and fetching target repository: {args.repo_url}")
-            # Instead of 'git clone .' which fails on non-empty dirs, we init and fetch
-            run_command(["git", "init"], cwd=root_dir, label="Init Git")
-            run_command(["git", "branch", "-M", "main"], cwd=root_dir)
-            run_command(["git", "remote", "add", "origin", authenticated_url], cwd=root_dir, label="Adding Remote")
-            
-            fetch_res = run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
+            print(f"📥 Cloning target repository: {args.repo_url}")
+            # Try a direct clone first
+            clone_res = run_command(["git", "clone", authenticated_url, "."], cwd=root_dir, label="Cloning Repo")
+            if clone_res.returncode != 0:
+                # If clone failed (likely non-empty dir), fallback to init/fetch
+                print("⚠️ Clone failed (likely non-empty directory). Falling back to init/fetch strategy...")
+                run_command(["git", "init"], cwd=root_dir, label="Init Git")
+                run_command(["git", "remote", "add", "origin", authenticated_url], cwd=root_dir, label="Adding Remote")
+                run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
+                run_command(["git", "checkout", "main"], cwd=root_dir)
         else:
             print("🔄 Safe Workspace Sync & Populate...")
             run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir, label="Updating Remote URL")
             run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
+            run_command(["git", "reset", "--hard", "origin/main"], cwd=root_dir, label="Syncing to Main")
                     
         # Configure Git Identity
         run_command(["git", "config", "user.name", "MARS Root Master"], cwd=root_dir)
