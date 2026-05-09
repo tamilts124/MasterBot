@@ -16,8 +16,15 @@ class MasterAgent:
     @staticmethod
     def get_leader_directive(goal: str, is_succession: bool = False, leader_id: str = None) -> str:
         header = f"Leadership Succession to {leader_id} complete. " if (is_succession and leader_id) else "Initial Mission Start. "
+        succession_clause = (
+            "\n[SUCCESSION PROTOCOL ACTIVE]\n"
+            "You have inherited this leadership role. You must immediately run 'get_task_manifest' to see the full state of the squad. "
+            "Some tasks from your predecessor may have been moved to you personally. Check your task list and lead the remaining squad to victory."
+            if is_succession else ""
+        )
         return (
-            f"URGENT: {header}You are the Root Master of a Multi-Agent Resilient System. Your goal: {goal}\n\n"
+            f"URGENT: {header}You are the Root Master of a Multi-Agent Resilient System. Your goal: {goal}\n"
+            f"{succession_clause}\n"
             "MANDATORY ARCHITECTURE PROTOCOL:\n"
             "1. SLAVE COMMAND & MONITORING: If you have slaves, you must command them with clear, detailed requirements and actively monitor their progress.\n"
             "2. REVIEW & FEEDBACK: When a worker reports their work, review it carefully. If there are issues, explain the corrections clearly so they can fix them.\n"
@@ -148,8 +155,15 @@ class MasterAgent:
             # Check Pulse: Detect hardware/OS failures of managed slaves
             for slave_id, proc in list(self.slave_processes.items()):
                 if proc and proc.poll() is not None:
-                    print(f"[Master {self.config.id}] Slave {slave_id} process DIED. Informing brain.")
+                    print(f"[Master {self.config.id}] ⚠️ Slave {slave_id} process DIED. Initiating automatic recovery...")
                     self.bus.update_agent(slave_id, status="died")
+                    
+                    # AUTOMATIC RECOVERY: Find tasks and reassign before the next brain cycle
+                    tasks = self.bus.get_agent_task_status(agent_id=slave_id)
+                    active = [t for t in tasks if t["status"] == "inprogress"]
+                    task_to_resume = active[-1]["task"] if active else None
+                    
+                    self.handle_slave_failure(slave_id, task_to_resume)
                     del self.slave_processes[slave_id]
 
             # 2. Consult Brain (Autonomous Leadership)
@@ -193,8 +207,8 @@ class MasterAgent:
                 healthy_coworkers.append(sid)
         
         if not healthy_coworkers:
-            print(f"[Critical] No healthy coworkers to take over for {failed_id}!")
-            # Last resort: try to handle it personally if the Master isn't too busy
+            print(f"[Master {self.config.id}] ⚠️ NO HEALTHY COWORKERS. Taking over all tasks from {failed_id} personally.")
+            self.bus.reassign_all_tasks(failed_id, self.config.id)
             return
 
         target_id = healthy_coworkers[0]

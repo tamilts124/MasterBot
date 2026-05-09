@@ -339,7 +339,14 @@ def git_commit_and_push(message: str) -> str:
 def get_bus():
     from pathlib import Path
     from .mas.communication import MessageBus
-    # Use the absolute path to .mas to ensure it works from any subdirectory
+    # Search upwards for the .mas directory (Workspace Root) to ensure connectivity from subdirs
+    current = Path.cwd().absolute()
+    for parent in [current] + list(current.parents):
+        path = parent / ".mas"
+        if path.exists():
+            return MessageBus(path)
+            
+    # Fallback for initialization or if not in a workspace subdir
     comm_path = Path(os.environ.get("PROJECT_ROOT", ".")).absolute() / ".mas"
     return MessageBus(comm_path)
 
@@ -374,14 +381,26 @@ def get_mas_identity() -> str:
 
 @tool
 def list_team_members() -> str:
-    """List the IDs of the direct Master, all Coworkers, and any active Slaves.
-    The Root Master will see the entire recursive hierarchy of the squad."""
+    """List the IDs and hierarchy of the squad. Use this ONLY to discover WHO is in your squad and who their Master is.
+    For real-time tasking and status, use 'check_all_agents_status' instead."""
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id:
         return "[Error] MAS context missing."
         
     master = os.environ.get("PARENT_ID", "None")
     bus = get_bus()
+    
+    # --- SCREEN OBSERVABILITY ---
+    all_agents = bus.get_agents()
+    print("\n" + "="*40)
+    print("📋 SQUAD VITALITY MANIFEST (SCREEN ONLY)")
+    for a in all_agents:
+        stat = a.get("status", "unknown")
+        icon = "🟢" if stat == "live" else "🔴"
+        print(f" {icon} {a['agent_id']} (Parent: {a['parent_id']}) -> Status: {stat}")
+    print("="*40 + "\n")
+    # ----------------------------
+
     coworkers = [c["agent_id"] for c in bus.get_my_coworkers(agent_id)]
     slaves = [s["agent_id"] for s in bus.get_my_slaves(agent_id)]
     
@@ -396,8 +415,46 @@ def list_team_members() -> str:
 @tool
 def check_agent_status(agent_id: str) -> str:
     """Check the real-time status and current task of a specific agent."""
-    status = get_bus().get_agent_task_status(agent_id)
-    return f"Agent {agent_id} Status: {status.get('status')} | Current Task: {status.get('current_task')}"
+    tasks = get_bus().get_agent_task_status(agent_id)
+    # Get the most recent task if available
+    latest = tasks[-1] if tasks else {}
+    
+    # Get system status
+    info = get_bus().get_agents(agent_id)
+    sys_status = info.get("status", "unknown") if info else "unknown"
+    
+    return f"Agent {agent_id} System Status: {sys_status} | Latest Task Status: {latest.get('status', 'None')} | Task: {latest.get('task', 'None')[:100]}..."
+
+@tool
+def get_task_manifest(agent_id: Optional[str] = None) -> str:
+    """Retrieve the master mission manifest from the database. This is the SOLE SOURCE OF TRUTH for all assignments.
+    If agent_id is provided, shows all tasks (past and present) for that specific agent.
+    If agent_id is None, shows all tasks for the entire squad hierarchy."""
+    bus = get_bus()
+    if agent_id:
+        tasks = bus.get_agent_task_status(agent_id)
+        label = f"Tasks for {agent_id}"
+    else:
+        tasks = bus.get_all_agents_task_status()
+        label = "Global Task Manifest"
+
+    if not tasks:
+        return f"No tasks found for {label}."
+
+    # --- SCREEN OBSERVABILITY ---
+    print(f"\n📋 {label.upper()} (SCREEN ONLY)")
+    for t in tasks:
+        v_icon = "✅" if t.get("is_verified") else "⏳"
+        print(f" [{t['status'].upper()}] {v_icon} {t['agent_id']}: {t['task'][:100]}...")
+    print()
+    # ----------------------------
+
+    output = f"--- {label} ---\n"
+    for t in tasks:
+        verified = " (Verified)" if t.get("is_verified") else " (Unverified)"
+        output += f"- {t['agent_id']}: [{t['status']}] {t['task'][:150]}{verified}\n"
+    
+    return output
 
 @tool
 def check_all_agents_status() -> str:
@@ -406,6 +463,18 @@ def check_all_agents_status() -> str:
     if not statuses:
         return "No agents found in the system."
         
+    # --- SCREEN OBSERVABILITY ---
+    print("\n" + "="*40)
+    print("🛰️ GLOBAL SQUAD OVERSIGHT (SCREEN ONLY)")
+    for s in statuses:
+        stat = s.get("agent_status", "unknown")
+        icon = "🟢" if stat == "live" else "🔴"
+        print(f" {icon} {s['agent_id']} (Parent: {s['parent_id']})")
+        print(f"    - Task Status: {s.get('task_status', 'None')}")
+        print(f"    - Current Task: {s.get('task', 'None')[:100]}...")
+    print("="*40 + "\n")
+    # ----------------------------
+
     output = "--- All Agents Status ---\n"
     for s in statuses:
         output += f"\nAgent: {s['agent_id']} (Parent: {s['parent_id']})\n"
@@ -440,6 +509,14 @@ def get_unread_messages() -> str:
     if not unread:
         return "You have no new unread messages."
         
+    # --- SCREEN OBSERVABILITY ---
+    print(f"\n📩 {agent_id} READ {len(unread)} NEW MESSAGES:")
+    for m in unread:
+        ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(m['timestamp']))
+        print(f"  [{ts}] FROM {m['from']}: {m.get('content')}")
+    print()
+    # ----------------------------
+        
     output = "--- NEW UNREAD MESSAGES ---\n"
     for m in unread:
         output += f"  (Sno: {m['sno']}) FROM {m['from']}: {m.get('content')}\n"
@@ -457,6 +534,14 @@ def get_unreplied_messages() -> str:
     
     if not unreplied:
         return "You have no unreplied messages."
+        
+    # --- SCREEN OBSERVABILITY ---
+    print(f"\n⚠️ {agent_id} HAS {len(unreplied)} UNREPLIED MESSAGES:")
+    for m in unreplied:
+        ts = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(m['timestamp']))
+        print(f"  [{ts}] FROM {m['from']}: {m.get('content')}")
+    print()
+    # ----------------------------
         
     output = "--- UNREPLIED MESSAGES (REPLY REQUIRED) ---\n"
     for m in unreplied:
@@ -477,6 +562,11 @@ def reply_mas_message(chat_sno: int, message: str) -> str:
     
     # Reply to the sender of the original message
     to_id = original_msg["from"]
+    
+    # --- SCREEN OBSERVABILITY ---
+    print(f"\n💬 {agent_id} REPLIED to {to_id} (Ref #{chat_sno}): {message[:100]}...\n")
+    # ----------------------------
+
     bus.reply_message(agent_id, to_id, message, chat_sno)
     return f"Reply sent to {to_id} for message {chat_sno}"
 
@@ -495,12 +585,19 @@ def inspect_agent_communication(agent_id: str) -> str:
 
 @tool
 def delegate_task(to_id: str, task_description: str) -> str:
-    """Assign a specific task to a slave and track it in the system database.
-    This both sends a message to the agent and updates their status to 'pending'."""
+    """Formally assign a task to a slave and record it in the mission database.
+    CRITICAL: Check 'get_task_manifest' first to ensure the agent is not already overloaded. 
+    Delegation automatically notifies the agent and sets their status to 'pending'."""
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
     
     bus = get_bus()
+    
+    # --- SCREEN OBSERVABILITY ---
+    print(f"\n🤝 DELEGATION: {agent_id} -> {to_id}")
+    print(f"   Task: {task_description[:100]}...\n")
+    # ----------------------------
+
     # 1. Update Database
     bus.update_agent_task_status(to_id, "pending", task_description, assigner_id=agent_id)
     # 2. Send Message
@@ -577,13 +674,20 @@ def update_task_status(status: str, task_description: Optional[str] = None) -> s
 
 @tool
 def verify_task(agent_id: str, task_description: str, approved: bool, feedback: str = "") -> str:
-    """Review and verify a completed task from a slave.
-    If approved=True, the task is marked as officially 'verified' and closed.
-    If approved=False, the task is moved back to 'inprogress' and feedback is sent to the slave."""
+    """Perform a formal audit of a slave's work.
+    If approved=True: The task is CLOSED and marked as 'verified'.
+    If approved=False: The task is REJECTED and moved back to 'inprogress'. The slave is automatically notified to begin rework based on your feedback."""
     my_id = os.environ.get("AGENT_ID")
     if not my_id: return "[Error] MAS context missing."
     
     bus = get_bus()
+    
+    # --- SCREEN OBSERVABILITY ---
+    v_icon = "✅" if approved else "❌"
+    print(f"\n{v_icon} VERIFICATION: {my_id} reviewed Task for {agent_id}")
+    print(f"   Result: {'APPROVED' if approved else 'REJECTED'}")
+    print(f"   Feedback: {feedback[:100]}...\n")
+    # ----------------------------
     if approved:
         bus.update_agent_task_status(agent_id, "completed", task_description, is_verified=1, verified_by=my_id)
         bus.send_message(my_id, agent_id, f"TASK APPROVED: Your work on '{task_description}' has been verified. Great job!")
@@ -600,8 +704,14 @@ def contribute_to_knowledge(topic: str, insight: str, relative_file_path: Option
     Other agents can query this instead of re-analyzing the same code/data.
     If this insight is about a specific file, provide its relative path so the vault can track if the file changes."""
     agent_id = os.environ.get("AGENT_ID", "Unknown")
+    # --- SCREEN OBSERVABILITY ---
+    print(f"\n🧠 KNOWLEDGE ADDED by {agent_id}:")
+    print(f"   Topic: {topic}")
+    print(f"   Path: {relative_file_path or 'Global'}")
+    print(f"   Insight: {insight[:200]}...\n")
+    # ----------------------------
+
     get_bus().update_knowledge(topic, insight, agent_id, relative_file_path)
-    print(f"\n[KNOWLEDGE] {agent_id} contributed insight on '{topic}'\n", flush=True)
     return f"Knowledge vault updated with topic: {topic}"
 
 @tool
@@ -621,6 +731,14 @@ def list_knowledge_topics() -> str:
             topic_lines.append(topic)
             
     topics = "\n - ".join(topic_lines)
+    
+    # --- SCREEN OBSERVABILITY ---
+    print("\n📚 SQUAD KNOWLEDGE VAULT (INDEX)")
+    for line in topic_lines:
+        print(f" - {line}")
+    print()
+    # ----------------------------
+
     return f"SQUAD KNOWLEDGE VAULT TOPICS:\n - {topics}"
 
 @tool
@@ -629,6 +747,15 @@ def query_knowledge(topic: Optional[str] = None, relative_file_path: Optional[st
     You can query by 'topic' or 'relative_file_path' to see if anyone has analyzed a file before you do.
     If you provide neither, it returns everything."""
     knowledge = get_bus().get_knowledge(topic=topic, relative_file_path=relative_file_path)
+    
+    # --- SCREEN OBSERVABILITY ---
+    if knowledge:
+        print(f"\n🔍 KNOWLEDGE QUERY result for '{topic or relative_file_path}':")
+        for t, data in knowledge.items():
+            print(f"   > {t}: {data.get('insight', '')[:300]}...")
+        print()
+    # ----------------------------
+
     if not knowledge:
         return "No shared knowledge found for this query."
     

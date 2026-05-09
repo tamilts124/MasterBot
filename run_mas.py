@@ -70,25 +70,24 @@ def main():
 
     # 2. Prepare Codebase (Safe Workspace Sync)
     if args.repo_url and args.repo_token:
-        try:
-            authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
+        authenticated_url = args.repo_url.replace("https://", f"https://x-access-token:{args.repo_token}@")
+        
+        if not (root_dir / ".git").exists():
+            print(f"📥 Initializing and fetching target repository: {args.repo_url}")
+            # Instead of 'git clone .' which fails on non-empty dirs, we init and fetch
+            run_command(["git", "init"], cwd=root_dir, label="Init Git")
+            run_command(["git", "branch", "-M", "main"], cwd=root_dir)
+            run_command(["git", "remote", "add", "origin", authenticated_url], cwd=root_dir, label="Adding Remote")
             
-            if not (root_dir / ".git").exists():
-                print(f"📥 Initializing and fetching target repository: {args.repo_url}")
-                run_command(["git", "init"], cwd=root_dir, label="Init Git")
-                run_command(["git", "branch", "-M", "main"], cwd=root_dir)
-                run_command(["git", "remote", "add", "origin", authenticated_url], cwd=root_dir, label="Adding Remote")
-                run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
-            else:
-                print("🔄 Safe Workspace Sync & Populate...")
-                run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir, label="Updating Remote URL")
-                run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
-                        
-            # Configure Git Identity
-            run_command(["git", "config", "user.name", "MARS Root Master"], cwd=root_dir)
-            run_command(["git", "config", "user.email", "master@mars.ai"], cwd=root_dir)
-        except Exception as git_err:
-            print(f"⚠️ Git Synchronization Warning: {git_err}. Continuing with local workspace.")
+            fetch_res = run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
+        else:
+            print("🔄 Safe Workspace Sync & Populate...")
+            run_command(["git", "remote", "set-url", "origin", authenticated_url], cwd=root_dir, label="Updating Remote URL")
+            run_command(["git", "fetch", "origin", "main"], cwd=root_dir, label="Fetching Data")
+                    
+        # Configure Git Identity
+        run_command(["git", "config", "user.name", "MARS Root Master"], cwd=root_dir)
+        run_command(["git", "config", "user.email", "master@mars.ai"], cwd=root_dir)
 
     # PERSISTENCE POLICY: We keep the .mas folder to continue progress across runs.
     # The Master will resume by reading the manifest and status from this directory.
@@ -166,6 +165,7 @@ def main():
     
     while True:
         # Pass parent_id if we have one (for Sub-Masters)
+        os.environ["AGENT_ID"] = current_config.id
         parent_id = args.parent or os.environ.get("PARENT_ID")
         root_master = MasterAgent(current_config, bus, tor, root_dir, config_path=args.config, parent_id=parent_id)
         
@@ -201,6 +201,9 @@ def main():
                 
                 print(f"[Critical] {current_config.id} is abdicating. PROMOTING {next_leader_id} to GLOBAL MASTER...")
                 
+                # DB REASSIGNMENT: Move all tasks and slaves from old master to the new leader
+                bus.reassign_all_tasks(current_config.id, next_leader_id)
+                bus.reassign_all_slaves(current_config.id, next_leader_id)
                 # ADOPTION: If the new leader is a leaf or has few slaves, 
                 # let it inherit all other living agents as its slaves.
                 other_survivors = [a for a in living_candidates if a.id != next_leader_id]

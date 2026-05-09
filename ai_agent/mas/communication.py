@@ -328,7 +328,7 @@ class MessageBus:
                 # Upsert based on the (agent_id, task) unique constraint
                 cursor = conn.execute("""
                     INSERT INTO agent_task_status (agent_id, original_agent_id, status, task, assigner_id, is_verified, verified_by, assigned_on, updated_on)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, coalesce(?, ?), ?, ?, ?, ?)
                     ON CONFLICT(agent_id, task) DO UPDATE SET 
                         status = excluded.status,
                         updated_on = excluded.updated_on,
@@ -336,7 +336,7 @@ class MessageBus:
                         verified_by = coalesce(excluded.verified_by, agent_task_status.verified_by),
                         assigner_id = coalesce(excluded.assigner_id, agent_task_status.assigner_id)
                     RETURNING id
-                """, (agent_id, agent_id, status, task, assigner_id, is_verified, verified_by, now, now))
+                """, (agent_id, agent_id, status, task, assigner_id, agent_id, is_verified, verified_by, now, now))
                 row = cursor.fetchone()
                 return row["id"] if row else None
             else:

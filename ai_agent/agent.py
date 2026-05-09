@@ -12,13 +12,15 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain.agents import create_agent
 from langchain_community.agent_toolkits import FileManagementToolkit
 from .tools import (
-    rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
+    rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
+    git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
     report_to_master, ask_coworker, get_mas_identity, list_team_members, 
     check_agent_status, check_all_agents_status, send_mas_message, reply_mas_message,
     get_unread_messages, get_unreplied_messages, inspect_agent_communication,
     contribute_to_knowledge, query_knowledge, list_knowledge_topics,
-    delegate_task, handle_slave_failure, update_task_status, verify_task
+    delegate_task, handle_slave_failure, update_task_status, verify_task,
+    get_task_manifest, get_bus
 )
 
 class TenaciousOllama(ChatOllama):
@@ -31,7 +33,23 @@ class TenaciousOllama(ChatOllama):
         
         for attempt in range(max_retries):
             try:
-                print(f"[Brain {agent_id}] Starting generation (Proxy: {active_proxy}, Attempt: {attempt + 1})")
+                # Calculate Idle count for console visibility
+                idle_count_str = ""
+                try:
+                    bus = get_bus()
+                    my_slaves = bus.get_my_slaves(agent_id)
+                    if my_slaves:
+                        # Only show if this agent actually has slaves
+                        live_slaves = [s for s in my_slaves if s["status"] == "live"]
+                        idle_ids = []
+                        for s in live_slaves:
+                            s_tasks = bus.get_agent_task_status(agent_id=s["agent_id"])
+                            if not [t for t in s_tasks if t["status"] in ["pending", "inprogress"]]:
+                                idle_ids.append(s["agent_id"])
+                        idle_count_str = f" | 💤 Idle: {len(idle_ids)}"
+                except: pass # Don't crash if DB is locked or bus fails
+                
+                print(f"[Brain {agent_id}] Starting generation (Proxy: {active_proxy}, Attempt: {attempt + 1}{idle_count_str})")
                 
                 all_keys = os.environ.get("API_KEYS", "").split(",")
                 all_keys = [k.strip() for k in all_keys if k.strip()]
@@ -59,8 +77,18 @@ class TenaciousOllama(ChatOllama):
     def _log_monologue(self, agent_id: str, messages: List[BaseMessage]):
         """Log the agent's internal monologue to a file for debugging."""
         try:
-            # Use absolute path for logs to avoid issues with os.chdir
-            log_dir = Path(os.environ.get("PROJECT_ROOT", ".")).absolute() / ".mas" / "monologues"
+            # Search upwards for the .mas directory (Workspace Root) to ensure logs stay in workspace
+            current = Path.cwd().absolute()
+            log_dir = None
+            for parent in [current] + list(current.parents):
+                path = parent / ".mas"
+                if path.exists():
+                    log_dir = path / "monologues"
+                    break
+            
+            if not log_dir:
+                log_dir = Path(os.environ.get("PROJECT_ROOT", ".")).absolute() / ".mas" / "monologues"
+            
             log_dir.mkdir(parents=True, exist_ok=True)
             log_file = log_dir / f"{agent_id}.log"
             
@@ -96,12 +124,14 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     
     # Generic tools
     tools.extend([
-        rename_file, run_bat, run_bash, run_python, web_search, fetch_url, git_commit_and_push,
+        rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
+        git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
         report_to_master, ask_coworker, get_mas_identity, list_team_members, 
         check_agent_status, check_all_agents_status, send_mas_message, reply_mas_message,
         get_unread_messages, get_unreplied_messages, inspect_agent_communication,
         contribute_to_knowledge, query_knowledge, list_knowledge_topics,
-        delegate_task, handle_slave_failure, update_task_status, verify_task
+        delegate_task, handle_slave_failure, update_task_status, verify_task,
+        get_task_manifest
     ])
 
     if whatsapp_jid:
@@ -140,15 +170,18 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     # Use MemorySaver for persistence
     memory = MemorySaver()
     
+    agent_id = os.environ.get("AGENT_ID", "Unknown")
+    
     agent = create_react_agent(
         model=TenaciousOllama(**ollama_kwargs),
         tools=tools,
         checkpointer=memory,
         prompt=(
+            f"🆔 YOUR IDENTITY: You are {agent_id}.\n\n" +
             (
                 "👑 MASTER DIRECTIVE: You are a Leader in this Multi-Agent Squad.\n"
                 "- YOUR DUTY: You must lead your own sub-squad while also fulfilling the objectives given by your superior Master.\n"
-                "- DELEGATION: Use 'delegate_task' to assign work to your slaves and 'check_agent_status' to monitor their progress.\n"
+                "- DELEGATION: Use 'delegate_task' to assign work to your slaves. Use 'get_task_manifest' or 'check_agent_status' to monitor progress and audit completions.\n"
                 "- REPORTING: You MUST use 'report_to_master' periodically to keep your superior informed of your branch's overall progress.\n"
                 "- SUCCESSION: If you inherited this role, you are now the AUTHORITY for this branch. Act with confidence.\n\n"
                 if is_master else
@@ -163,7 +196,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "- RESEARCH: 'web_search', 'fetch_url'\n"
             "- VERSION CONTROL: 'git_status', 'git_commit_and_push', 'git_pull', 'git_stash_save', 'git_stash_pop'\n"
             "- WHATSAPP: 'is_whatsapp_connected', 'send_whatsapp_message', 'get_whatsapp_last_messages'\n"
-            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'reply_mas_message', 'check_agent_status', 'check_all_agents_status', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge', 'list_knowledge_topics', 'delegate_task', 'handle_slave_failure', 'update_task_status'\n\n"
+            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'reply_mas_message', 'check_agent_status', 'check_all_agents_status', 'get_task_manifest', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge', 'list_knowledge_topics', 'delegate_task', 'verify_task', 'handle_slave_failure', 'update_task_status'\n\n"
             "MANDATORY COORDINATION RULES:\n"
             "0. NO INDIVIDUAL WORK: You are FORBIDDEN from working in isolation. You must cooperate with others at every stage of the development cycle.\n"
             "1. SHARED KNOWLEDGE IS POWER: Before analyzing any file or directory, you MUST use 'list_knowledge_topics' to see what is already understood. If a topic exists, use 'query_knowledge' instead of re-analyzing.\n"
@@ -239,7 +272,28 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                         else:
                             input_data = str(input_data) + v_alert
                 
-                # 3. Proactive Knowledge Manifest
+                # 3. Squad Capacity Alert: Do I have idle slaves?
+                if is_master:
+                    my_slaves = bus.get_my_slaves(agent_id)
+                    live_slaves = [s["agent_id"] for s in my_slaves if s["status"] == "live"]
+                    all_tasks = bus.get_agent_task_status()
+                    
+                    idle_slaves = []
+                    for sid in live_slaves:
+                        active_tasks = [t for t in all_tasks if t["agent_id"] == sid and t["status"] in ["pending", "inprogress"]]
+                        if not active_tasks:
+                            idle_slaves.append(sid)
+                    
+                    if idle_slaves:
+                        idle_alert = f"\n\n[SQUAD IDLE ALERT] The following agents are LIVE but have NO tasks: {', '.join(idle_slaves)}. "
+                        idle_alert += "They are wasting resources. You MUST use 'delegate_task' to assign them new work immediately to maintain squad momentum."
+                        
+                        if isinstance(input_data, dict) and "input" in input_data:
+                            input_data["input"] += idle_alert
+                        else:
+                            input_data = str(input_data) + idle_alert
+
+                # 4. Proactive Knowledge Manifest
                 knowledge = bus.get_knowledge()
                 if knowledge:
                     topic_list = []
@@ -263,11 +317,20 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
 
             actual_input = input_data["input"] if isinstance(input_data, dict) else input_data
 
-            # Invoke the agent graph
-            result = agent.invoke({"messages": [HumanMessage(content=actual_input)]}, config)
-            
-            # Return the last message content to maintain compatibility
-            return result["messages"][-1]
+            # Invoke the agent graph with history resilience
+            try:
+                result = agent.invoke({"messages": [HumanMessage(content=actual_input)]}, config)
+                # Return the last message content to maintain compatibility
+                return result["messages"][-1]
+            except Exception as e:
+                error_msg = str(e)
+                if "ToolMessage" in error_msg or "INVALID_CHAT_HISTORY" in error_msg:
+                    print(f"\n[RECOVERY] Detected corrupt history for {agent_id}. Resetting session state for this cycle...\n")
+                    # Fallback: Invoke without history for one cycle to break the loop
+                    result = agent.invoke({"messages": [HumanMessage(content=actual_input + "\n\nNOTE: Your previous tool call failed. Do not assume its result. Start fresh.")]}, {"configurable": {"thread_id": f"{thread_id}_recovery"}})
+                    return result["messages"][-1]
+                else:
+                    raise e
 
     return AgentWrapper()
 
