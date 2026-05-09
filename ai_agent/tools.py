@@ -562,6 +562,8 @@ def check_all_agents_status() -> str:
 @tool
 def send_mas_message(to_id: str, message: str) -> str:
     """Send a private message to another agent in the squad.
+    MANDATORY: Before sending, use 'get_chat_history' to ensure you aren't flooding the recipient with redundant messages.
+    If your last message to this agent hasn't been replied to yet, wait for their response before messaging again.
     Use this to communicate with your Master, coordinate with coworkers, or give specific ad-hoc instructions to subordinates.
     Args:
         to_id: The ID of the agent you want to message (e.g., 'rootMaster', 'slave1').
@@ -569,6 +571,8 @@ def send_mas_message(to_id: str, message: str) -> str:
     """
     agent_id = os.environ.get("AGENT_ID")
     if not agent_id: return "[Error] MAS context missing."
+    
+    bus = get_bus()
     
     # Permission Logic removed: Anyone can communicate to anyone!
     print(f"\n[COMM] {agent_id} -> {to_id}: {message[:100]}...\n", flush=True)
@@ -637,7 +641,8 @@ def get_unreplied_messages() -> str:
 @tool
 def reply_mas_message(chat_sno: int, message: str) -> str:
     """Submit a response to a specific message identified by its serial number (chat_sno).
-    This tool correctly links your reply to the original inquiry in the database.
+    MANDATORY: Before replying, use 'get_chat_history' to review your chat history and ensure you haven't already responded to this message.
+    If you have already replied, do NOT message again; wait for the other agent to respond to you, as they may be busy working.
     Args:
         chat_sno: The serial number of the message you are responding to.
         message: Your response text.
@@ -646,6 +651,7 @@ def reply_mas_message(chat_sno: int, message: str) -> str:
     if not agent_id: return "[Error] MAS context missing."
     
     bus = get_bus()
+    
     original_msg = bus.get_message_by_sno(chat_sno)
     if not original_msg:
         return f"[Error] Message with Sno {chat_sno} not found."
@@ -661,16 +667,30 @@ def reply_mas_message(chat_sno: int, message: str) -> str:
     return f"Reply sent to {to_id} for message {chat_sno}"
 
 @tool
-def inspect_agent_communication(agent_id: str) -> str:
-    """Audit the complete communication history of a specific agent.
-    Use this to understand the context of a task or to debug coordination failures.
+def get_chat_history(peer_id: str = None) -> str:
+    """Retrieve your communication logs. 
+    If peer_id is provided, it returns the history between you and that specific agent.
+    If peer_id is omitted, it returns your complete chat history with everyone.
     Args:
-        agent_id: The ID of the agent whose history you wish to inspect.
+        peer_id: Optional ID of the agent whose specific chat history you wish to review.
     """
-    history_grouped = get_bus().get_chat_history(agent_id)
-    if not history_grouped: return f"No recorded communication for {agent_id}."
+    my_id = os.environ.get("AGENT_ID")
+    if not my_id: return "[Error] MAS context missing."
     
-    output = f"--- Complete Communication Log for {agent_id} ---\n"
+    bus = get_bus()
+    history = bus.get_chat_history(my_id, peer_id)
+    
+    if not history:
+        if peer_id: return f"No recorded communication between {my_id} and {peer_id}."
+        return f"No recorded communication for {my_id}."
+    
+    # If peer_id was provided, history is a List. If not, it's a Dict[peer, List].
+    if peer_id:
+        history_grouped = {peer_id: history}
+    else:
+        history_grouped = history
+
+    output = f"--- Communication Logs for {my_id} ---\n"
     for peer, msgs in history_grouped.items():
         output += f"\n[Chat with {peer}]:\n"
         for msg in msgs:

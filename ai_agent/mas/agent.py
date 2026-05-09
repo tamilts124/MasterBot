@@ -1,4 +1,3 @@
-from ai_agent.tools import terminate_mission
 import os
 import time
 import json
@@ -18,10 +17,10 @@ from ..tools import (
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
     report_to_master, ask_coworker, get_mas_identity, list_team_members, 
     check_agent_status, check_all_agents_status, send_mas_message, reply_mas_message,
-    get_unread_messages, get_unreplied_messages, inspect_agent_communication,
+    get_unread_messages, get_unreplied_messages, get_chat_history,
     contribute_to_knowledge, query_knowledge, list_knowledge_topics,
     delegate_task, handle_slave_failure, update_task_status, verify_task,
-    get_task_manifest, get_bus
+    get_task_manifest, get_bus, terminate_mission
 )
 
 class TenaciousOllama(ChatOllama):
@@ -138,7 +137,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
         git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
         report_to_master, ask_coworker, get_mas_identity, list_team_members, 
         check_agent_status, check_all_agents_status, send_mas_message, reply_mas_message,
-        get_unread_messages, get_unreplied_messages, inspect_agent_communication,
+        get_unread_messages, get_unreplied_messages, get_chat_history,
         contribute_to_knowledge, query_knowledge, list_knowledge_topics,
         delegate_task, handle_slave_failure, update_task_status, verify_task,
         get_task_manifest, terminate_mission
@@ -211,7 +210,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "- RESEARCH: 'web_search', 'fetch_url'\n"
             "- VERSION CONTROL: 'git_status', 'git_commit_and_push', 'git_pull', 'git_stash_save', 'git_stash_pop'\n"
             "- WHATSAPP: 'is_whatsapp_connected', 'send_whatsapp_message', 'get_whatsapp_last_messages'\n"
-            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'reply_mas_message', 'check_agent_status', 'check_all_agents_status', 'get_task_manifest', 'inspect_agent_communication', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge', 'list_knowledge_topics', 'delegate_task', 'verify_task', 'handle_slave_failure', 'update_task_status', 'terminate_mission'\n\n"
+            "- MAS COORDINATION: 'report_to_master', 'ask_coworker', 'send_mas_message', 'reply_mas_message', 'check_agent_status', 'check_all_agents_status', 'get_task_manifest', 'get_chat_history', 'get_mas_identity', 'list_team_members', 'contribute_to_knowledge', 'query_knowledge', 'list_knowledge_topics', 'delegate_task', 'verify_task', 'handle_slave_failure', 'update_task_status', 'terminate_mission'\n\n"
             "MANDATORY COORDINATION RULES:\n"
             "0. NO INDIVIDUAL WORK: You are FORBIDDEN from working in isolation. You must cooperate with others at every stage of the development cycle.\n"
             "1. SHARED KNOWLEDGE IS POWER: Before analyzing any file or directory, you MUST use 'list_knowledge_topics' to see what is already understood. If a topic exists, use 'query_knowledge' instead of re-analyzing.\n"
@@ -221,7 +220,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "5. ACKNOWLEDGE & FEEDBACK: If a coworker shares a plan, you MUST read it and provide feedback or acknowledgment.\n"
             "6. IMPORTANT DECISIONS: For any major architectural change, you MUST consult the Master for approval.\n"
             "7. ASK WHEN IN DOUBT: If you have any doubt, ask the Master or a coworker immediately.\n"
-            "8. MONITOR: Use 'check_agent_status' and 'inspect_agent_communication' to align your work.\n"
+            "8. MONITOR: Use 'check_agent_status' and 'get_chat_history' to align your work.\n"
             "9. REPORT: You MUST report to the Master ('report_to_master') after every significant milestone.\n"
             "10. ONE-SHOT COMMUNICATION: When using 'send_mas_message' or 'report_to_master', you MUST only do it ONCE per objective. Do not wait for a response; send the message and immediately proceed to your next technical file operation.\n"
             "11. INBOX PRIORITY: If you see an [INBOX ALERT], read it once and ACT. Do not keep checking the inbox if no new messages have arrived.\n"
