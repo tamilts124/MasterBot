@@ -1,63 +1,66 @@
-# 🌌 MARS: Multi-Agent Resilient System (Hardened)
+# 🌌 MARS: Multi-Agent Resilient System (Stateless & Autonomous)
 
 ![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/tamilts124/AI_CLI/mas_agent_tor.yml?style=for-the-badge)
 ![Python Version](https://img.shields.io/badge/Python-3.10+-blue?style=for-the-badge&logo=python)
-![Architecture](https://img.shields.io/badge/Architecture-Multi--Agent-FF6F00?style=for-the-badge)
-![Persistence](https://img.shields.io/badge/State-Git--Persistent-success?style=for-the-badge)
+![Architecture](https://img.shields.io/badge/Architecture-Stateless--Autonomous-FF6F00?style=for-the-badge)
+![Database](https://img.shields.io/badge/Persistence-SQLite--Bus-success?style=for-the-badge)
 
-**MARS** is an elite, autonomous developer squad architecture designed for extreme resilience and high-coordination development. It transforms single-agent AI into a collaborative, hierarchical team that maintains state across environments via Git-backed persistence.
+**MARS** is a hardened, production-grade autonomous developer squad architecture. It transforms standard AI agents into a high-resilience hierarchical team that operates via a **stateless, database-driven** coordination engine. Designed for mission-critical deployments where persistence and reliability are non-negotiable.
 
-## 🚀 Key Features
+## 🚀 Architectural Upgrades (v2.0)
 
--   **Elite Squad Coordination**:
-    -   **Root Master**: Acts as the Architect, splitting goals into modular tasks and monitoring squad health.
-    -   **Autonomous Slaves**: Capable developer agents that share plans, ask doubts, and work cooperatively.
-    -   **Mandatory Peer Review**: Agents must validate implementation plans with the squad before writing code.
--   **Extreme Resilience**:
-    -   **History Mode**: Full conversation history persistence using `MemorySaver`.
-    -   **Circuit Breakers**: Automatic task reassignment if an agent reaches its limit or crashes.
-    -   **Self-Healing**: If a Master fails, a Slave is automatically promoted to take over the mission.
--   **Portability & Privacy**:
-    -   **Workspace Encapsulation**: All agent communication, logs, and session state are stored in a local `.mas/` folder inside the project workspace.
-    -   **Git-Backed Memory**: The `.mas` state is pushed to Git, allowing the mission to "live" in the repository and continue across different environments.
-    -   **Tor IP Rotation**: Integrated Tor support for anonymous and resilient API communication.
--   **Security**:
-    -   **Secret Configs**: Support for loading full squad configurations from GitHub Secrets (`MAS_CONFIG`).
-    -   **Auto-Ignore**: Sensitive configuration files are automatically kept out of version control via `.gitignore`.
+-   **Stateless Coordination Engine**: 
+    -   Eliminated brittle local state variables. The system now uses a **Central SQLite Message Bus** as the single source of truth for all tasks, messages, and agent pulse tracking.
+-   **Autonomous Agentic Leadership**:
+    -   Removed hardcoded script logic. Masters now lead their squads using high-level **Agentic Tools** (`delegate_task`, `verify_task`, `handle_slave_failure`).
+-   **Recursive "Sub-Master" Hierarchy**:
+    -   Full support for multi-level squads. Any agent can act as a Master to its own sub-squad while remaining a subordinate to its superior.
+-   **Aggressive Succession & Adoption**:
+    -   **Master Reincarnation**: If a leader fails, a healthy survivor is "Drafted" and promoted to leader.
+    -   **Orphan Adoption**: New leaders automatically "adopt" the slaves of failed predecessors, ensuring the chain of command never breaks.
+-   **Mandatory Audit Layer**:
+    -   No task is ever closed until it is **Verified**. Masters receive proactive alerts for unverified completions and must formally sign off via the `verify_task` tool.
+-   **Main-Thread Persistence (CI/CD Ready)**:
+    -   The main process is a permanent host designed to survive brain failures and rate limits without exiting. This prevents GitHub Actions from terminating the VM prematurely.
 
-## 🛠 MAS Architecture
+## 🛠 Command & Control
 
-1.  **Orchestration**: `run_mas.py` launches the Root Master.
-2.  **Task Splitting**: The Master analyzes the goal and assigns sub-tasks to the Slave squad via a local Message Bus.
-3.  **Collaborative Loop**: Agents communicate in real-time, sharing progress and asking for feedback.
-4.  **Verification**: Master reviews completed work and assigns follow-up improvements or new features.
+1.  **Deployment**: `run_mas.py` launches the mission host.
+2.  **Autonomous Architecture**: The Master consults the database manifest, splits the goal, and delegates work using AI-led tools.
+3.  **Real-Time Monitoring**: The Master loop monitors slave health and message counts, providing high-level directives to the AI Brain.
+4.  **Verification Loop**: Finished work is audited by the Master. Feedback is sent automatically for any task that doesn't meet the squad's elite standards.
 
 ## 🔐 Configuration
 
-MARS uses a `mas_config.json` file (or a `MAS_CONFIG` GitHub Secret) to define the squad:
+Define your squad hierarchy in `mas_config.json`:
 
 ```json
 {
   "id": "root_master",
   "model": "gemma4:31b-cloud",
   "api_url": "https://ollama.com",
-  "api_key": "YOUR_MASTER_KEY",
+  "api_key": "YOUR_KEY",
   "slaves": [
-    { "id": "slave_1", "api_key": "YOUR_SLAVE_KEY" },
-    { "id": "slave_2", "api_key": "YOUR_SLAVE_KEY" }
+    { 
+      "id": "sub_master_1", 
+      "slaves": [
+        { "id": "worker_1_1" },
+        { "id": "worker_1_2" }
+      ] 
+    },
+    { "id": "worker_2" }
   ]
 }
 ```
 
-## 🚀 Running Locally
+## 🤖 Running the Mission
 
 ```powershell
-python run_mas.py --config mas_config.json --prompt "Build a fullstack dashboard"
+# Launch the squad with a specific goal
+python run_mas.py --config mas_config.json --prompt "Implement a resilient database migration system"
+
+# MARS will automatically handle rate limits, crashes, and reassignments.
 ```
-
-## 🤖 GitHub Actions
-
-Trigger the **MARS Agent (Tor Enabled)** workflow to launch the squad in a headless, persistent environment.
 
 ---
 
