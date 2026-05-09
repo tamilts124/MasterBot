@@ -46,7 +46,7 @@ class MasterAgent:
         print(f"[Master {self.config.id}] 🔍 RECONNECTING WITH SQUAD...")
         for slave_config in self.config.slaves:
             info = self.bus.get_agents(slave_config.id)
-            if info and info.get("status") not in ["died", "offline"]:
+            if info and info.get("status") == "live":
                 print(f"[Master {self.config.id}] Re-linked with active slave: {slave_config.id}")
                 # Mark as known. The cycle will monitor via status if proc is None
                 self.slave_processes[slave_config.id] = None

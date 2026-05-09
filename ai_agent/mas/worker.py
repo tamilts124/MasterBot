@@ -175,30 +175,21 @@ def main():
                 # Check if I'm the ONLY survivor
                 living_peers = []
                 for peer in coworkers:
-                    if bus.get_agent_task_status(peer).get("status") not in ["died", "offline"]:
+                    info = bus.get_agents(peer)
+                    if info and info.get("status") == "live":
                         living_peers.append(peer)
                 
                 if not living_peers:
-                    print(f"[Worker {args.id}] SOLE SURVIVOR DETECTED. Inheriting all workloads.")
-                    # SOLE SURVIVOR LOGIC
-                    bus.update_agent_task_status(args.id, "inprogress")
+                    print(f"[Worker {args.id}] SOLE SURVIVOR DETECTED. Checking database for inherited work...")
+                    # RECOVERY: Check if there are any incomplete tasks for me or my fallen peers
+                    my_tasks = bus.get_agent_task_status(args.id)
+                    pending = [t for t in my_tasks if t["status"] != "completed"]
                     
-                    manifest_path = comm_dir / "global_task_manifest.json"
-                    if manifest_path.exists():
-                        with open(manifest_path, "r") as f:
-                            all_tasks = json.load(f)
-                        
-                        for sid, task_content in all_tasks.items():
-                            peer_status = bus.get_agent_task_status(sid)
-                            if peer_status.get("status") != "completed":
-                                print(f"[Worker {args.id}] Inheriting task from fallen {sid}: {task_content[:30]}...")
-                                # Sequential Execution...
-                    
-                    print(f"[Worker {args.id}] All workloads finished. Performing FINAL PUSH.")
-                    bus.update_agent_task_status(args.id, "completed")
-                    sys.exit(0)
+                    if not pending:
+                        print(f"[Worker {args.id}] All my tasks are complete. No orphans detected. Exiting.")
+                        sys.exit(0)
                 else:
-                    print(f"[Worker {args.id}] MASTER {args.parent} DIED. I am the Alpha Slave. Promoting to Master...")
+                    print(f"[Worker {args.id}] MASTER {args.parent} FAILURE. I am the Alpha Slave. Promoting to Master...")
                     become_master(bus, coworkers)
             else:
                 # State key is already checked above; no separate key needed to prevent fighting
