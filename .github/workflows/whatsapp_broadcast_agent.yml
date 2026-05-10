@@ -45,7 +45,8 @@ jobs:
           docker build -t whatsapp-api .
           docker run -d --name wa-service -p 3000:3000 whatsapp-api
           # Wait for the service to initialize
-          echo "Waiting for WhatsApp API to start..."
+          echo "Waiting 15 seconds for WhatsApp API to start..."
+          sleep 15
           docker ps
 
       - name: Set up Python
@@ -65,7 +66,7 @@ jobs:
           AGENT_PROMPT2: ${{ vars.AGENT_PROMPT2 }}
           AGENT_PROMPT3: ${{ vars.AGENT_PROMPT3 }}
         run: |
-          python -m ai_agent.main \
+          python -m ai_agent.sas.main \
             --model "gemma4:31b-cloud" \
             --ollama-url "https://ollama.com" \
             --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
@@ -74,7 +75,7 @@ jobs:
             --prompt "$AGENT_PROMPT1" \
             --quiet
 
-          python -m ai_agent.main \
+          python -m ai_agent.sas.main \
             --model "gemma4:31b-cloud" \
             --ollama-url "https://ollama.com" \
             --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
@@ -83,7 +84,7 @@ jobs:
             --prompt "$AGENT_PROMPT2" \
             --quiet
 
-          python -m ai_agent.main \
+          python -m ai_agent.sas.main \
             --model "gemma4:31b-cloud" \
             --ollama-url "https://ollama.com" \
             --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
