@@ -3,15 +3,21 @@ import base64
 import json
 from typing import Optional
 from langchain_core.tools import tool
-import pyautogui
-
-pyautogui.FAILSAFE = False
+try:
+    import pyautogui
+    pyautogui.FAILSAFE = False
+    GUI_AVAILABLE = True
+except Exception:
+    # This happens in headless environments like GitHub Actions without xvfb
+    GUI_AVAILABLE = False
 
 @tool
 def capture_screenshot(filename: str = "screenshot.png") -> str:
     """Capture a screenshot of the current primary monitor.
     Returns the path to the saved image. Use this to 'see' what's on the screen.
     """
+    if not GUI_AVAILABLE:
+        return "[ERROR] GUI tools are not available in this environment (no DISPLAY detected)."
     try:
         shot = pyautogui.screenshot()
         shot.save(filename)
@@ -23,6 +29,8 @@ def capture_screenshot(filename: str = "screenshot.png") -> str:
 def get_mouse_position() -> str:
     """Get the current (x, y) coordinates of the mouse cursor.
     """
+    if not GUI_AVAILABLE:
+        return "[ERROR] GUI tools are not available (no mouse detected)."
     x, y = pyautogui.position()
     return f"Mouse Position: ({x}, {y})"
 
@@ -30,6 +38,8 @@ def get_mouse_position() -> str:
 def mouse_move(x: int, y: int) -> str:
     """Move the mouse cursor to specific (x, y) coordinates.
     """
+    if not GUI_AVAILABLE:
+        return "[ERROR] GUI tools are not available."
     try:
         pyautogui.moveTo(x, y)
         return f"[SUCCESS] Mouse moved to ({x}, {y})"
@@ -43,6 +53,8 @@ def mouse_click(x: Optional[int] = None, y: Optional[int] = None, button: str = 
         x, y: Optional coordinates. If None, clicks current position.
         button: 'left', 'right', or 'middle'.
     """
+    if not GUI_AVAILABLE:
+        return "[ERROR] GUI tools are not available."
     try:
         pyautogui.click(x=x, y=y, button=button)
         return f"[SUCCESS] Performed {button} click at ({x or 'current'}, {y or 'current'})"
@@ -53,6 +65,8 @@ def mouse_click(x: Optional[int] = None, y: Optional[int] = None, button: str = 
 def keyboard_type(text: str) -> str:
     """Type a string of text using the keyboard.
     """
+    if not GUI_AVAILABLE:
+        return "[ERROR] GUI tools are not available."
     try:
         pyautogui.write(text, interval=0.1)
         return f"[SUCCESS] Typed: {text}"
@@ -63,6 +77,8 @@ def keyboard_type(text: str) -> str:
 def keyboard_press(key: str) -> str:
     """Press a specific keyboard key (e.g., 'enter', 'esc', 'tab', 'f1').
     """
+    if not GUI_AVAILABLE:
+        return "[ERROR] GUI tools are not available."
     try:
         pyautogui.press(key)
         return f"[SUCCESS] Pressed key: {key}"
@@ -74,6 +90,8 @@ def get_screen_size() -> str:
     """Get the current screen resolution (width and height).
     Use this to calibrate your mouse coordinates.
     """
+    if not GUI_AVAILABLE:
+        return "[ERROR] GUI tools are not available."
     w, h = pyautogui.size()
     return f"Screen Resolution: {w}x{h}"
 
