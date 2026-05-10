@@ -18,6 +18,12 @@ if hasattr(sys.stderr, 'buffer'):
 os.environ['PYTHONIOENCODING'] = 'utf-8'
 os.environ['PYTHONLEGACYWINDOWSSTDIO'] = 'utf-8'
 
+# Fix invalid SSL certificate paths that cause search/web failures
+for ssl_var in ['SSL_CERT_FILE', 'REQUESTS_CA_BUNDLE']:
+    val = os.environ.get(ssl_var)
+    if val and not os.path.exists(val):
+        del os.environ[ssl_var]
+
 def safe_print(text, file=None, end='\n'):
     """Safely print text, handling encoding issues gracefully"""
     if file is None:
@@ -132,21 +138,27 @@ def main(argv: List[str] | None = None) -> None:
 
         config = {"configurable": {"thread_id": "standalone_session"}, "recursion_limit": 100}
         if streaming:
-            if not quiet:
-                safe_print("\nAgent: ", end="")
             try:
                 full_reply = ""
+                header_printed = False
                 for event in agent.stream({"messages": msgs_to_send}, config=config):
-                    # LangGraph events are dicts like {'agent': {'messages': [...]}} or {'tools': {...}}
                     for node_name, node_data in event.items():
                         if "messages" in node_data:
                             last_msg = node_data["messages"][-1]
                             if isinstance(last_msg, AIMessage) and last_msg.content:
+                                if not quiet and not header_printed:
+                                    safe_print("\nAgent: ", end="")
+                                    header_printed = True
+                                
                                 # Handle encoding when printing
                                 content = last_msg.content
                                 if not quiet:
                                     safe_print(content, end="")
                                 full_reply += last_msg.content
+                                
+                                # If this message also contains tool calls, ensure the next log starts on a new line
+                                if last_msg.tool_calls and not quiet:
+                                    safe_print("")
                 if not quiet:
                     safe_print("")
                 if use_history:

@@ -17,7 +17,7 @@ from ..tools import (
     start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
     git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
     is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages,
-    capture_screenshot, get_mouse_position, mouse_move, mouse_click, keyboard_type, keyboard_press, get_screen_size, analyze_screenshot, image_to_array
+    capture_screenshot, get_mouse_position, mouse_move, mouse_click, keyboard_type, keyboard_press, get_screen_size
 )
 
 class TenaciousOllama(ChatOllama):
@@ -32,6 +32,14 @@ class TenaciousOllama(ChatOllama):
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         agent_id = os.environ.get("AGENT_ID", "Agent")
         active_proxy = os.environ.get("ACTIVE_PROXY", "DIRECT")
+        
+        # Log tool calls from history (Inspired by MAS)
+        for msg in messages:
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    # Truncate args for clean console display
+                    clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in tc['args'].items()}
+                    print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}({clean_args})")
         
         # Use only the keys passed during initialization
         all_keys = []
@@ -52,11 +60,16 @@ class TenaciousOllama(ChatOllama):
                         base_url=self.base_url,
                         api_key=current_key,
                         num_ctx=getattr(self, "num_ctx", 65536),
-                        temperature=getattr(self, "temperature", 0),
+                        temperature=getattr(self, "temperature", 0.0),
                         streaming=getattr(self, "streaming", False),
                         client_kwargs={"headers": {"Authorization": f"Bearer {current_key}"}}
                     )
+                    # Sync headers to client_kwargs for compatibility
+                    if hasattr(self, "client_kwargs"):
+                        temp_llm.client_kwargs.update(self.client_kwargs)
+                    
                     res = temp_llm._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+
                     # Success! Remember this key index for the next turn
                     TenaciousOllama.last_successful_key_index = key_idx
                     return res
@@ -84,6 +97,41 @@ class TenaciousOllama(ChatOllama):
                     raise e
         raise Exception(f"Failed to generate response after {max_retries} attempts.")
 
+    def _stream(self, messages, stop=None, run_manager=None, **kwargs):
+        agent_id = os.environ.get("AGENT_ID", "Agent")
+        
+        # Log tool calls from history (Identical to _generate)
+        for msg in messages:
+            if hasattr(msg, "tool_calls") and msg.tool_calls:
+                for tc in msg.tool_calls:
+                    clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in tc['args'].items()}
+                    print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}({clean_args})")
+
+        all_keys = []
+        if hasattr(self, "internal_api_keys") and self.internal_api_keys:
+            all_keys = [k.strip() for k in self.internal_api_keys.split(",") if k.strip()]
+            
+        key_idx = TenaciousOllama.last_successful_key_index % len(all_keys) if all_keys else 0
+        current_key = all_keys[key_idx] if all_keys else ""
+
+        if current_key:
+            temp_llm = ChatOllama(
+                model=self.model,
+                base_url=self.base_url,
+                api_key=current_key,
+                num_ctx=getattr(self, "num_ctx", 65536),
+                temperature=getattr(self, "temperature", 0.0),
+                streaming=True,
+                client_kwargs={"headers": {"Authorization": f"Bearer {current_key}"}}
+            )
+            if hasattr(self, "client_kwargs"):
+                temp_llm.client_kwargs.update(self.client_kwargs)
+            
+            # Use temp_llm to stream
+            yield from temp_llm._stream(messages, stop=stop, run_manager=run_manager, **kwargs)
+        else:
+            yield from super()._stream(messages, stop=stop, run_manager=run_manager, **kwargs)
+
 def build_agent(work_dir: Path, model_name: str, streaming: bool = False, 
                 whatsapp_jid: Optional[str] = None, whatsapp_url: Optional[str] = None,
                 ollama_url: Optional[str] = None, ollama_key: Optional[str] = None,
@@ -108,7 +156,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
     tools.extend([
         rename_file, run_bat, run_bash, run_python, web_search, fetch_url, 
         start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
-        capture_screenshot, get_mouse_position, mouse_move, mouse_click, keyboard_type, keyboard_press, get_screen_size, analyze_screenshot, image_to_array,
+        capture_screenshot, get_mouse_position, mouse_move, mouse_click, keyboard_type, keyboard_press, get_screen_size,
         git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push
     ])
 
