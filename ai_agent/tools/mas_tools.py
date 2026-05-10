@@ -33,7 +33,15 @@ def report_to_master(summary: str, task_id: int) -> str:
     if not (agent_id and parent_id): return "[Error] MAS context missing."
     
     print(f"\n[REPORT] {agent_id} -> Master {parent_id}: {summary[:100]}...\n", flush=True)
-    get_bus().send_message(agent_id, parent_id, {"summary": summary, "task_id": task_id})
+    
+    bus = get_bus()
+    # Check if already reported
+    existing_tasks = bus.get_agent_task_status(agent_id=agent_id)
+    this_task = next((t for t in existing_tasks if t.get("id") == task_id or t.get("task_id") == task_id), None)
+    if this_task and this_task.get("status") == "completed" and this_task.get("is_verified"):
+        return f"[REJECTED] Task {task_id} is already completed and verified. Do not report it again."
+    
+    bus.send_message(agent_id, parent_id, {"summary": summary, "task_id": task_id})
     return f"[SUCCESS] Report for task '{task_id}' has been delivered to Master {parent_id}. This task is now officially REPORTED. Do NOT repeat this report."
 
 @tool
@@ -199,6 +207,13 @@ def send_mas_message(to_id: str, message: str) -> str:
     
     bus = get_bus()
     
+    # --- IDEMPOTENCY CHECK ---
+    history = bus.get_chat_history(agent_id, to_id)
+    if history:
+        last_msg = history[-1]
+        if last_msg["from"] == agent_id and last_msg["to"] == to_id and last_msg.get("content") == message:
+            return f"[REJECTED] Your last message to {to_id} was identical. Do not repeat yourself; wait for a response."
+
     print(f"\n[COMM] {agent_id} -> {to_id}: {message[:100]}...\n", flush=True)
     bus.send_message(agent_id, to_id, message)
     return f"Message sent to {to_id}"
@@ -280,6 +295,10 @@ def reply_mas_message(chat_sno: int, message: str) -> str:
     if not original_msg:
         return f"[Error] Message with Sno {chat_sno} not found."
     
+    # --- IDEMPOTENCY CHECK ---
+    if original_msg.get("reply_sno"):
+        return f"[REJECTED] You have already replied to message #{chat_sno}. Do not send multiple replies to the same message."
+
     # Reply to the sender of the original message
     to_id = original_msg["from"]
     
@@ -482,7 +501,14 @@ def contribute_to_knowledge(topic: str, insight: str, relative_file_path: Option
     print(f"   Insight: {insight[:200]}...\n")
     # ----------------------------
 
-    get_bus().update_knowledge(topic, insight, agent_id, relative_file_path)
+    bus = get_bus()
+    # --- REDUNDANCY CHECK ---
+    existing = bus.get_knowledge(topic=topic)
+    if existing and topic in existing:
+        if existing[topic].get("insight") == insight:
+            return f"[INFO] This insight for topic '{topic}' is already recorded. No update needed."
+
+    bus.update_knowledge(topic, insight, agent_id, relative_file_path)
     return f"Knowledge vault updated with topic: {topic}"
 
 @tool

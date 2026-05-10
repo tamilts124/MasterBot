@@ -9,12 +9,40 @@ import argparse
 import shutil
 import time
 import socket
+import io
 from pathlib import Path
+
+# Ensure UTF-8 encoding for Windows terminals
+if hasattr(sys.stdout, 'buffer'):
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'buffer'):
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+# Set environment variables to force UTF-8
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+os.environ['PYTHONLEGACYWINDOWSSTDIO'] = 'utf-8'
+
+def safe_print(text):
+    """Safely print text, handling encoding issues gracefully"""
+    try:
+        print(text, end='', flush=True)
+    except UnicodeEncodeError:
+        # Fallback to printing with replacement characters
+        print(text.encode('utf-8', errors='replace').decode('utf-8'), end='', flush=True)
 
 def run_command(cmd, cwd=None, env=None, label=None):
     """Run a shell command with real-time output while capturing for results."""
     if label:
-        print(f"Action: {label}")
+        safe_print(f"Action: {label}\n")
+    
+    # Prepare environment with UTF-8 settings
+    cmd_env = os.environ.copy()
+    cmd_env.update({
+        'PYTHONIOENCODING': 'utf-8',
+        'PYTHONLEGACYWINDOWSSTDIO': 'utf-8'
+    })
+    if env:
+        cmd_env.update(env)
     
     # We use Popen to stream output in real-time while still catching it in a variable
     process = subprocess.Popen(
@@ -22,15 +50,17 @@ def run_command(cmd, cwd=None, env=None, label=None):
         stdout=subprocess.PIPE, 
         stderr=subprocess.STDOUT, 
         text=True, 
+        encoding='utf-8', # Force UTF-8 decoding of the child process output
         cwd=cwd, 
-        env=env,
+        env=cmd_env,
         bufsize=1,
-        universal_newlines=True
+        universal_newlines=True,
+        errors='replace'  # Handle encoding errors gracefully
     )
     
     full_output = []
     for line in process.stdout:
-        print(line, end='', flush=True) # Real-time print to console
+        safe_print(line)  # Use safe_print instead of direct print
         full_output.append(line)
     
     process.wait()
@@ -56,10 +86,10 @@ def rotate_tor_ip():
             s.sendall(b'SIGNAL NEWNYM\r\n')
             s.recv(1024)
             s.sendall(b'QUIT\r\n')
-        print("Action: Requesting new Tor IP (NEWNYM)")
+        safe_print("Action: Requesting new Tor IP (NEWNYM)\n")
         pass # NO SLEEP - Rule #1 Compliance
     except Exception as e:
-        print(f"Warning: Failed to rotate Tor IP: {e}")
+        safe_print(f"Warning: Failed to rotate Tor IP: {e}\n")
 
 def main():
     parser = argparse.ArgumentParser(description="AI Developer Agent with key cycling.")
@@ -73,12 +103,14 @@ def main():
     parser.add_argument("--whatsapp-url", default="http://localhost:3000", help="WhatsApp API base URL.")
     parser.add_argument("--max-tool-output", type=int, default=60000, help="Max characters for tool output.")
     parser.add_argument("--ollama-ctx", type=int, default=65536, help="Ollama context window size.")
+    parser.add_argument("--temperature", type=float, default=0.0, help="Ollama temperature setting.")
+    parser.add_argument("--no-tor", action="store_true", help="Disable Tor IP rotation.")
     
     args = parser.parse_args()
 
     keys = [k.strip() for k in args.keys.split(",") if k.strip()]
     if not keys:
-        print("Error: No API keys provided.")
+        safe_print("Error: No API keys provided.\n")
         sys.exit(1)
 
     repo_url = args.target_repo
@@ -90,13 +122,13 @@ def main():
     
     if not workspace.exists():
         workspace.mkdir()
-        print(f"Cloning target repository: {repo_url}")
+        safe_print(f"Cloning target repository: {repo_url}\n")
         clone_res = run_command(["git", "clone", authenticated_url, "."], cwd=workspace, label="Cloning Repo")
         if clone_res.returncode != 0:
-            print("Failed to clone target repository.")
+            safe_print("Failed to clone target repository.\n")
             sys.exit(1)
     else:
-        print(f"Safe Workspace Sync...")
+        safe_print(f"Safe Workspace Sync...\n")
         # Ensure origin exists (it might be missing after git init)
         remote_check = run_command(["git", "remote"], cwd=workspace)
         if "origin" not in remote_check.stdout:
@@ -107,8 +139,8 @@ def main():
     # Ensure .gitignore exists in target repo
     target_gitignore = workspace / ".gitignore"
     if not target_gitignore.exists():
-        print("Creating default .gitignore in target repository...")
-        with open(target_gitignore, "w") as f:
+        safe_print("Creating default .gitignore in target repository...\n")
+        with open(target_gitignore, "w", encoding='utf-8') as f:
             f.write("__pycache__/\n*.py[cod]\nnode_modules/\n.venv/\nvenv/\n.DS_Store\n")
 
     # Configure Git (Uses env vars or defaults)
@@ -121,14 +153,15 @@ def main():
     key_index = 0
     while True:
         if key_index >= len(keys):
-            print(f"\n[INFO] All {len(keys)} keys processed. restarting cycle...")
+            safe_print(f"\n[INFO] All {len(keys)} keys processed. restarting cycle...\n")
             break
 
         current_key = keys[key_index]
-        print(f"\n--- Attempting with Ollama API Key {key_index + 1}/{len(keys)} ---")
+        safe_print(f"\n--- Attempting with Ollama API Key {key_index + 1}/{len(keys)} ---\n")
         
         # Rotate Tor IP before each key rotation or cycle
-        rotate_tor_ip()
+        if not args.no_tor:
+            rotate_tor_ip()
 
         # Prepare command to run the agent
         agent_cmd = [
@@ -140,6 +173,7 @@ def main():
             "--prompt", args.prompt,
             "--max-tool-output", str(args.max_tool_output),
             "--ollama-ctx", str(args.ollama_ctx),
+            "--temperature", str(args.temperature),
             "--quiet"
         ]
 
@@ -151,14 +185,15 @@ def main():
         attempt = 0
         while attempt < max_retries:
             if attempt > 0:
-                print(f"Retry attempt {attempt}/{max_retries}...")
-                rotate_tor_ip() # Try a new IP on retry
+                safe_print(f"Retry attempt {attempt}/{max_retries}...\n")
+                if not args.no_tor:
+                    rotate_tor_ip() # Try a new IP on retry
 
             agent_res = run_command(agent_cmd, label="Starting AI Agent Session")
             
             if agent_res.returncode == 0:
                 # Task completed successfully - keep the loop going with the same key
-                print("\n--- Session finished. Starting next development cycle in 5 seconds... ---")
+                safe_print("\n--- Session finished. Starting next development cycle in 5 seconds... ---\n")
                 attempt = 0 # Reset retries for next cycle
                 continue # Run again with the same key
 
@@ -167,7 +202,7 @@ def main():
             
             # Specific retry condition
             if "server disconnected without sending a response" in error_output:
-                print("Detected 'Server disconnected' error. Retrying with new Tor IP...")
+                safe_print("Detected 'Server disconnected' error. Retrying with new Tor IP...\n")
                 attempt += 1
                 continue
             
@@ -177,21 +212,21 @@ def main():
             # Save progress on any rotation-worthy error
             status_res = run_command(["git", "status", "--porcelain"], cwd=workspace, label="Checking for changes")
             if status_res.stdout.strip():
-                print("\nSaving progress before key rotation...")
+                safe_print("\nSaving progress before key rotation...\n")
                 run_command(["git", "add", "."], cwd=workspace, label="Staging changes")
                 commit_msg = f"AI Developer: Progress saved (Key {key_index + 1} interrupted/rotated)"
                 run_command(["git", "commit", "-m", commit_msg], cwd=workspace, label="Committing changes")
                 run_command(["git", "push", "-u", "origin", "main"], cwd=workspace, label="Emergency Push to GitHub")
 
             if is_limit:
-                print(f"Key {key_index + 1} appears to be exhausted. Rotating...")
+                safe_print(f"Key {key_index + 1} appears to be exhausted. Rotating...\n")
             else:
-                print(f"Agent failed with an unexpected error. Rotating key...")
+                safe_print(f"Agent failed with an unexpected error. Rotating key...\n")
             
             key_index += 1
             break # Exit retry loop to move to next key
 
-    print("\n[CRITICAL] All sessions of Ollama limit excited. No valid keys left.")
+    safe_print("\n[CRITICAL] All sessions of Ollama limit excited. No valid keys left.\n")
     sys.exit(1)
 
 if __name__ == "__main__":
