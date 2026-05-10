@@ -122,10 +122,14 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
                 whatsapp_jid: Optional[str] = None, whatsapp_url: Optional[str] = None,
                 ollama_url: Optional[str] = None, ollama_key: Optional[str] = None,
                 api_keys: Optional[List[str]] = None,
-                ollama_ctx: int = 65536, is_master: bool = False):
+                ollama_ctx: int = 65536, temperature: float = 0.0,
+                max_tool_output: int = 60000, is_master: bool = False):
     """Create a ReAct agent bound to ``work_dir`` and ``model_name``."""
     work_dir.mkdir(parents=True, exist_ok=True)
     os.chdir(work_dir)
+    
+    # Configure Tool environment
+    os.environ["MAX_TOOL_OUTPUT"] = str(max_tool_output)
 
     tools = FileManagementToolkit(
         root_dir=str(work_dir),
@@ -153,7 +157,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
 
     ollama_kwargs = {
         "model": model_name,
-        "temperature": 0,
+        "temperature": temperature,
         "num_ctx": ollama_ctx
     }
     if ollama_url:

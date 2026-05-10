@@ -34,13 +34,15 @@ class MasterAgent:
             "You are the authority. LEAD."
         )
 
-    def __init__(self, config: AgentConfig, bus: MessageBus, tor: TorManager, workspace: Path, config_path: str = None, parent_id: str = None):
+    def __init__(self, config: AgentConfig, bus: MessageBus, tor: TorManager, workspace: Path, config_path: str = None, parent_id: str = None, temperature: float = 0.0, max_tool_output: int = 60000):
         self.config = config
         self.bus = bus
         self.tor = tor
         self.workspace = workspace
         self.config_path = config_path
         self.parent_id = parent_id
+        self.temperature = temperature
+        self.max_tool_output = max_tool_output
         self.slave_processes: Dict[str, subprocess.Popen] = {}
         self.reassignment_counts: Dict[str, int] = {} # task_description -> count
         self.abdicated = False
@@ -71,7 +73,12 @@ class MasterAgent:
             
             if slave_config.slaves:
                 # Sub-masters run run_mas.py
-                cmd = [sys.executable, str(Path(self.project_root) / "run_mas.py"), "--id", slave_config.id, "--parent", self.config.id, "--level", str(slave_config.level)]
+                cmd = [sys.executable, str(Path(self.project_root) / "run_mas.py"), 
+                       "--id", slave_config.id, 
+                       "--parent", self.config.id, 
+                       "--level", str(slave_config.level),
+                       "--temperature", str(self.temperature),
+                       "--max-tool-output", str(self.max_tool_output)]
                 if self.config_path:
                     cmd.extend(["--config", self.config_path])
                 if not self.tor: cmd.append("--no-tor")
@@ -84,7 +91,9 @@ class MasterAgent:
                 "--level", str(slave_config.level),
                 "--model", slave_config.model,
                 "--ollama-url", slave_config.api_url,
-                "--ollama-key", ",".join(slave_config.api_keys)
+                "--ollama-key", ",".join(slave_config.api_keys),
+                "--temperature", str(self.temperature),
+                "--max-tool-output", str(self.max_tool_output)
             ]
                 if not self.tor: cmd.append("--no-tor")
             
@@ -140,6 +149,8 @@ class MasterAgent:
                 ollama_url=self.config.api_url,
                 ollama_key=self.config.api_key,
                 api_keys=self.config.api_keys,
+                temperature=self.temperature,
+                max_tool_output=self.max_tool_output,
                 is_master=True
             )
 

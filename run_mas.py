@@ -53,6 +53,8 @@ def main():
     parser.add_argument("--repo-url", help="Target GitHub repository URL")
     parser.add_argument("--repo-token", help="GitHub Personal Access Token")
     parser.add_argument("--no-tor", action="store_true", help="Disable Tor isolation and use direct connection")
+    parser.add_argument("--temperature", type=float, default=0.0, help="LLM temperature")
+    parser.add_argument("--max-tool-output", type=int, default=60000, help="Max characters for tool output")
     
     # Sub-Master / Identity Identity
     parser.add_argument("--id", help="Identity of this specific agent")
@@ -171,7 +173,10 @@ def main():
         # Pass parent_id if we have one (for Sub-Masters)
         os.environ["AGENT_ID"] = current_config.id
         parent_id = args.parent or os.environ.get("PARENT_ID")
-        root_master = MasterAgent(current_config, bus, tor, root_dir, config_path=args.config, parent_id=parent_id)
+        root_master = MasterAgent(current_config, bus, tor, root_dir, 
+                                  config_path=args.config, parent_id=parent_id,
+                                  temperature=args.temperature, 
+                                  max_tool_output=args.max_tool_output)
         
         # If a new agent is taking over, we don't launch, we DISCOVER
         if current_config.id != config.id:

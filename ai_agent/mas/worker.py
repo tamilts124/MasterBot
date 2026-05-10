@@ -24,6 +24,8 @@ def main():
     parser.add_argument("--ollama-url", default="https://ollama.com", help="Ollama API URL")
     parser.add_argument("--ollama-key", help="Ollama API Key")
     parser.add_argument("--no-tor", action="store_true", help="Disable Tor proxy")
+    parser.add_argument("--temperature", type=float, default=0.0, help="LLM temperature")
+    parser.add_argument("--max-tool-output", type=int, default=60000, help="Max characters for tool output")
     args = parser.parse_args()
 
     # Environment Setup
@@ -102,7 +104,9 @@ def main():
                     model_name=args.model,
                     ollama_url=args.ollama_url,
                     ollama_key=first_key,
-                    api_keys=all_keys
+                    api_keys=all_keys,
+                    temperature=args.temperature,
+                    max_tool_output=args.max_tool_output
                 )
             
             # The AgentWrapper handles situational awareness (Inbox + Tasks)
