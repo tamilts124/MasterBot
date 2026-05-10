@@ -45,8 +45,6 @@ jobs:
           docker build -t whatsapp-api .
           docker run -d --name wa-service -p 3000:3000 whatsapp-api
           # Wait for the service to initialize
-          echo "Waiting 15 seconds for WhatsApp API to start..."
-          sleep 15
           docker ps
 
       - name: Set up Python
