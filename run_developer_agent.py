@@ -99,6 +99,9 @@ def main():
     parser.add_argument("--target-token", required=True, help="GitHub Personal Access Token for the target repo.")
     parser.add_argument("--model", default="qwen3-coder:480b-cloud", help="Ollama model to use.")
     parser.add_argument("--ollama-url", default="https://ollama.com", help="Ollama API base URL.")
+    parser.add_argument("--provider", default="ollama", choices=["ollama", "anthropic"], help="LLM provider to use.")
+    parser.add_argument("--anthropic-key", help="Anthropic API Key(s) (comma-separated).")
+    parser.add_argument("--anthropic-url", help="Anthropic API base URL (if using a proxy).")
     parser.add_argument("--whatsapp", help="Target WhatsApp number/JID.")
     parser.add_argument("--whatsapp-url", default="http://localhost:3000", help="WhatsApp API base URL.")
     parser.add_argument("--max-tool-output", type=int, default=60000, help="Max characters for tool output.")
@@ -108,10 +111,16 @@ def main():
     
     args = parser.parse_args()
 
-    keys = [k.strip() for k in args.keys.split(",") if k.strip()]
-    if not keys:
-        safe_print("Error: No API keys provided.\n")
-        sys.exit(1)
+    if args.provider == "anthropic":
+        keys = [k.strip() for k in (args.anthropic_key or "").split(",") if k.strip()]
+        if not keys:
+            safe_print("Error: No Anthropic API keys provided.\n")
+            sys.exit(1)
+    else:
+        keys = [k.strip() for k in args.keys.split(",") if k.strip()]
+        if not keys:
+            safe_print("Error: No Ollama API keys provided.\n")
+            sys.exit(1)
 
     repo_url = args.target_repo
     target_token = args.target_token
@@ -141,7 +150,7 @@ def main():
     if not target_gitignore.exists():
         safe_print("Creating default .gitignore in target repository...\n")
         with open(target_gitignore, "w", encoding='utf-8') as f:
-            f.write("__pycache__/\n*.py[cod]\nnode_modules/\n.venv/\nvenv/\n.DS_Store\n")
+            f.write("__pycache__/\n*.py[cod]\nnode_modules/\n.venv/\nvenv/\n.DS_Store\n.sas/\nbrowser_outputs/\n")
 
     # Configure Git (Uses env vars or defaults)
     git_name = os.environ.get("GIT_USER_NAME", "AI Developer Agent")
@@ -157,7 +166,7 @@ def main():
             break
 
         current_key = keys[key_index]
-        safe_print(f"\n--- Attempting with Ollama API Key {key_index + 1}/{len(keys)} ---\n")
+        safe_print(f"\n--- Attempting with {args.provider.capitalize()} API Key {key_index + 1}/{len(keys)} ---\n")
         
         # Rotate Tor IP before each key rotation or cycle
         if not args.no_tor:
@@ -168,14 +177,21 @@ def main():
             sys.executable, "-m", "ai_agent.sas.main",
             "--workdir", str(workspace.resolve()),
             "--model", args.model,
-            "--ollama-url", args.ollama_url,
-            "--ollama-key", current_key,
+            "--provider", args.provider,
             "--prompt", args.prompt,
             "--max-tool-output", str(args.max_tool_output),
-            "--ollama-ctx", str(args.ollama_ctx),
-            "--temperature", str(args.temperature),
-            "--quiet"
         ]
+
+        if args.provider == "anthropic":
+            agent_cmd.extend(["--anthropic-key", current_key])
+            if args.anthropic_url:
+                agent_cmd.extend(["--anthropic-url", args.anthropic_url])
+        else:
+            agent_cmd.extend(["--ollama-url", args.ollama_url, "--ollama-key", current_key])
+            agent_cmd.extend(["--ollama-ctx", str(args.ollama_ctx)])
+            agent_cmd.extend(["--temperature", str(args.temperature)])
+
+        agent_cmd.append("--quiet")
 
         if args.whatsapp:
             agent_cmd.extend(["--whatsapp", args.whatsapp, "--whatsapp-url", args.whatsapp_url])
@@ -226,7 +242,7 @@ def main():
             key_index += 1
             break # Exit retry loop to move to next key
 
-    safe_print("\n[CRITICAL] All sessions of Ollama limit excited. No valid keys left.\n")
+    safe_print(f"\n[CRITICAL] All sessions of {args.provider.capitalize()} limit excited. No valid keys left.\n")
     sys.exit(1)
 
 if __name__ == "__main__":

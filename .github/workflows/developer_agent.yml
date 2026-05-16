@@ -11,6 +11,13 @@ on:
       prompt:
         description: 'Optional manual task (appended to vars.DEVELOPER_PROMPT)'
         required: false
+      provider:
+        description: 'LLM Provider (ollama or anthropic)'
+        default: 'ollama'
+        required: false
+      model:
+        description: 'Model to use (overrides vars.DEVELOPER_MODEL)'
+        required: false
 
 jobs:
   run-developer-agent:
@@ -71,11 +78,14 @@ jobs:
       - name: Run Developer Agent
         env:
           OLLAMA_API_KEYS: ${{ secrets.OLLAMA_API_KEYS }}
+          ANTHROPIC_API_KEYS: ${{ secrets.ANTHROPIC_API_KEYS }}
           TARGET_REPO_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
           # Logic to handle both manual and automated (cron) runs
           PROMPT: "${{ github.event.inputs.prompt }} ${{ vars.DEVELOPER_PROMPT }}"
           TARGET_REPO: ${{ vars.TARGET_REPO_URL }}
-          MODEL: ${{ vars.DEVELOPER_MODEL }}
+          MODEL: "${{ github.event.inputs.model || vars.DEVELOPER_MODEL }}"
+          PROVIDER: "${{ github.event.inputs.provider || 'ollama' }}"
+          ANTHROPIC_URL: ${{ vars.ANTHROPIC_API_URL }}
           # Real-time logging
           PYTHONUNBUFFERED: "1"
           # Tor Proxy configuration
@@ -86,6 +96,9 @@ jobs:
           python run_developer_agent.py \
             --prompt "$PROMPT" \
             --keys "$OLLAMA_API_KEYS" \
+            --provider "$PROVIDER" \
+            --anthropic-key "$ANTHROPIC_API_KEYS" \
+            --anthropic-url "$ANTHROPIC_URL" \
             --target-repo "$TARGET_REPO" \
             --target-token "$TARGET_REPO_TOKEN" \
             --model "$MODEL" \

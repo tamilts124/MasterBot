@@ -11,6 +11,13 @@ on:
       prompt:
         description: 'AI Agent Prompt'
         required: false
+      provider:
+        description: 'LLM Provider (ollama or anthropic)'
+        default: 'ollama'
+        required: false
+      model:
+        description: 'Model to use (overrides vars.BROADCAST_MODEL)'
+        required: false
 
 jobs:
   run-agent:
@@ -63,29 +70,43 @@ jobs:
           AGENT_PROMPT1: ${{ vars.AGENT_PROMPT1 }}
           AGENT_PROMPT2: ${{ vars.AGENT_PROMPT2 }}
           AGENT_PROMPT3: ${{ vars.AGENT_PROMPT3 }}
+          PROVIDER: "${{ github.event.inputs.provider || 'ollama' }}"
+          MODEL: "${{ github.event.inputs.model || vars.BROADCAST_MODEL || 'gemma4:31b-cloud' }}"
+          OLLAMA_API_KEY: ${{ secrets.OLLAMA_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_URL: ${{ vars.ANTHROPIC_API_URL }}
         run: |
           python -m ai_agent.sas.main \
-            --model "gemma4:31b-cloud" \
+            --model "$MODEL" \
+            --provider "$PROVIDER" \
             --ollama-url "https://ollama.com" \
-            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
+            --ollama-key "$OLLAMA_API_KEY" \
+            --anthropic-key "$ANTHROPIC_API_KEY" \
+            --anthropic-url "$ANTHROPIC_URL" \
             --whatsapp "${{ secrets.WHATSAPP_NUMBER1 }}" \
             --whatsapp-url "http://localhost:3000" \
             --prompt "$AGENT_PROMPT1" \
             --quiet
 
           python -m ai_agent.sas.main \
-            --model "gemma4:31b-cloud" \
+            --model "$MODEL" \
+            --provider "$PROVIDER" \
             --ollama-url "https://ollama.com" \
-            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
+            --ollama-key "$OLLAMA_API_KEY" \
+            --anthropic-key "$ANTHROPIC_API_KEY" \
+            --anthropic-url "$ANTHROPIC_URL" \
             --whatsapp "${{ secrets.WHATSAPP_NUMBER2 }}" \
             --whatsapp-url "http://localhost:3000" \
             --prompt "$AGENT_PROMPT2" \
             --quiet
 
           python -m ai_agent.sas.main \
-            --model "gemma4:31b-cloud" \
+            --model "$MODEL" \
+            --provider "$PROVIDER" \
             --ollama-url "https://ollama.com" \
-            --ollama-key "${{ secrets.OLLAMA_API_KEY }}" \
+            --ollama-key "$OLLAMA_API_KEY" \
+            --anthropic-key "$ANTHROPIC_API_KEY" \
+            --anthropic-url "$ANTHROPIC_URL" \
             --whatsapp "${{ secrets.WHATSAPP_NUMBER3 }}" \
             --whatsapp-url "http://localhost:3000" \
             --prompt "$AGENT_PROMPT3" \

@@ -20,3 +20,5 @@ mas_workspace/
 mas_config.json
 .mas
 *.png
+.sas/
+browser_outputs/

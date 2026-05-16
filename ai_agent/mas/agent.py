@@ -21,7 +21,10 @@ from ..tools import (
     get_unread_messages, get_unreplied_messages, get_chat_history,
     contribute_to_knowledge, query_knowledge, list_knowledge_topics,
     delegate_task, handle_slave_failure, update_task_status, verify_task,
-    get_task_manifest, get_bus, terminate_mission
+    get_task_manifest, get_bus, terminate_mission,
+    start_browser_session, list_browser_sessions, browser_new_tab, browser_switch_tab, 
+    browser_close_tab, browser_navigate, browser_get_view, browser_click, 
+    browser_type, browser_eval, browser_get_network_logs, browser_screenshot, stop_browser_session
 )
 
 class TenaciousOllama(ChatOllama):
@@ -146,7 +149,10 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
         start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
         contribute_to_knowledge, query_knowledge, list_knowledge_topics,
         delegate_task, handle_slave_failure, update_task_status, verify_task,
-        get_task_manifest, terminate_mission
+        get_task_manifest, terminate_mission,
+        start_browser_session, list_browser_sessions, browser_new_tab, browser_switch_tab, 
+        browser_close_tab, browser_navigate, browser_get_view, browser_click, 
+        browser_type, browser_eval, browser_get_network_logs, browser_screenshot, stop_browser_session
     ])
 
     if whatsapp_jid:
@@ -213,6 +219,7 @@ def build_agent(work_dir: Path, model_name: str, streaming: bool = False,
             "AVAILABLE TOOLS:\n"
             "- FILE OPS: 'read_file', 'write_file', 'list_directory', 'rename_file'\n"
             "- EXECUTION: 'run_bat', 'run_bash', 'run_python', 'start_interactive_process', 'list_interactive_processes', 'get_process_history', 'send_to_process', 'stop_interactive_process'\n"
+            "- ADVANCED BROWSING: 'start_browser_session', 'list_browser_sessions', 'browser_new_tab', 'browser_switch_tab', 'browser_close_tab', 'browser_navigate', 'browser_get_view', 'browser_click', 'browser_type', 'browser_eval', 'browser_get_network_logs', 'browser_screenshot', 'stop_browser_session'\n"
             "- RESEARCH: 'web_search', 'fetch_url'\n"
             "- VERSION CONTROL: 'git_status', 'git_commit_and_push', 'git_pull', 'git_stash_save', 'git_stash_pop'\n"
             "- WHATSAPP: 'is_whatsapp_connected', 'send_whatsapp_message', 'get_whatsapp_last_messages'\n"

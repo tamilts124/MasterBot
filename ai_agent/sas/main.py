@@ -69,6 +69,12 @@ def main(argv: List[str] | None = None) -> None:
                         help="Ollama API base URL.")
     parser.add_argument("-K", "--ollama-key", type=str, default=None,
                         help="Ollama API Key (if required).")
+    parser.add_argument("--provider", type=str, default="ollama", choices=["ollama", "anthropic"],
+                        help="LLM provider (default: ollama).")
+    parser.add_argument("--anthropic-key", type=str, default=None,
+                        help="Anthropic API Key (comma-separated for rotation).")
+    parser.add_argument("--anthropic-url", type=str, default=None,
+                        help="Anthropic API base URL (if using a proxy).")
     parser.add_argument("-T", "--max-tool-output", type=int, default=60000,
                         help="Maximum character length for tool outputs (default: 60000).")
     parser.add_argument("-C", "--ollama-ctx", type=int, default=65536,
@@ -79,6 +85,8 @@ def main(argv: List[str] | None = None) -> None:
                         help="LLM temperature (default: 0.0).")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="Suppress all logging and prefixes, displaying only the raw agent response.")
+    parser.add_argument("-L", "--history-limit", type=int, default=5,
+                        help="Maximum number of messages to keep in conversation history (default: 5).")
     args = parser.parse_args(argv)
 
     work_dir = Path(args.workdir).expanduser().resolve()
@@ -93,8 +101,10 @@ def main(argv: List[str] | None = None) -> None:
     max_tool_output = args.max_tool_output
     ollama_ctx = args.ollama_ctx
     quiet = args.quiet or (single_prompt is not None)
+    history_limit = args.history_limit
     
     os.environ["MAX_TOOL_OUTPUT"] = str(max_tool_output)
+    os.environ["AGENT_WORKDIR"] = str(work_dir)
 
     if not quiet:
         safe_print("="*50)
@@ -106,7 +116,11 @@ def main(argv: List[str] | None = None) -> None:
         safe_print(f" - WhatsApp: {whatsapp_jid if whatsapp_jid else 'DISABLED'}")
         if whatsapp_jid:
             safe_print(f" - WA URL:   {whatsapp_url}")
-        safe_print(f" - Ollama URL: {ollama_url if ollama_url else 'http://localhost:11434 (default)'}")
+        safe_print(f" - Provider: {args.provider}")
+        if args.provider == "ollama":
+            safe_print(f" - Ollama URL: {ollama_url if ollama_url else 'http://localhost:11434 (default)'}")
+        else:
+            safe_print(f" - Anthropic URL: {args.anthropic_url if args.anthropic_url else 'https://api.anthropic.com (default)'}")
         safe_print(f" - Max Tool Out: {max_tool_output}")
         safe_print(f" - Ollama Ctx: {ollama_ctx}")
         if single_prompt:
@@ -114,9 +128,10 @@ def main(argv: List[str] | None = None) -> None:
         safe_print("="*50 + "\n")
 
     try:
-        agent = build_agent(work_dir, model_name, streaming=streaming, 
+        agent = build_agent(work_dir, model_name, provider=args.provider, streaming=streaming, 
                            whatsapp_jid=whatsapp_jid, whatsapp_url=whatsapp_url,
                             ollama_url=ollama_url, ollama_key=ollama_key,
+                            anthropic_key=args.anthropic_key, anthropic_url=args.anthropic_url,
                             ollama_ctx=ollama_ctx, temperature=args.temperature,
                             max_tool_output=max_tool_output)
     except Exception as e:
@@ -129,14 +144,43 @@ def main(argv: List[str] | None = None) -> None:
     message_history: List[Union[HumanMessage, AIMessage]] = []
 
     def process_query(query: str):
+        nonlocal message_history
         human_msg = HumanMessage(content=query)
         if use_history:
             message_history.append(human_msg)
+            # Limit history length to prevent context bloat
+            if len(message_history) > history_limit:
+                # Keep the first message (often containing instructions) and the last N-1 messages
+                # Actually, simpler: just keep the last N messages as requested.
+                message_history = message_history[-history_limit:]
             msgs_to_send = list(message_history)
         else:
             msgs_to_send = [human_msg]
 
         config = {"configurable": {"thread_id": "standalone_session"}, "recursion_limit": 100}
+        
+        # Self-Healing: Check if previous turn left dangling tool calls
+        try:
+            state = agent.get_state(config)
+            if state and state.values.get("messages"):
+                last_msg = state.values["messages"][-1]
+                if hasattr(last_msg, "tool_calls") and last_msg.tool_calls:
+                    # Previous run crashed during tool execution. 
+                    # Inject a dummy error message for each dangling call to allow recovery.
+                    from langchain_core.messages import ToolMessage
+                    recovery_msgs = []
+                    for tc in last_msg.tool_calls:
+                        recovery_msgs.append(ToolMessage(
+                            tool_call_id=tc["id"],
+                            content=f"[RECOVERY] Tool call failed due to an unexpected system error. Please try again or use a different approach.",
+                            name=tc["name"]
+                        ))
+                    agent.update_state(config, {"messages": recovery_msgs})
+                    if not quiet:
+                        safe_print("[System] Recovered from a previous crash. Resuming...")
+        except Exception:
+            pass # State check failed, proceed anyway
+
         if streaming:
             try:
                 full_reply = ""

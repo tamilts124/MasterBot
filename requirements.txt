@@ -12,3 +12,4 @@ PySocks
 certifi
 ddgs
 pyautogui
+langchain-anthropic
