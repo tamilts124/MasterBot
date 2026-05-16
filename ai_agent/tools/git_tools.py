@@ -56,10 +56,12 @@ def git_stash_pop() -> str:
         return f"[Error] Git stash pop failed: {exc}"
 
 @tool
-def git_pull() -> str:
-    """Download and merge the latest changes from the remote repository (origin main).
+def git_pull(branch: str = "main") -> str:
+    """Download and merge the latest changes from the remote repository.
     MANDATORY: Run this if `git_commit_and_push` fails due to 'non-fast-forward' errors.
     This tool ensures your local workspace is synchronized with the latest squad contributions.
+    Args:
+        branch: Remote branch to pull from (default: 'main').
     """
     try:
         # Verify we are in a git repository
@@ -68,23 +70,25 @@ def git_pull() -> str:
             return f"[Error] Not a git repository: {os.getcwd()}"
 
         # Attempt to pull
-        result = subprocess.run(["git", "pull", "origin", "main"], capture_output=True, text=True)
+        result = subprocess.run(["git", "pull", "origin", branch], capture_output=True, text=True)
         if result.returncode != 0:
             output = result.stdout + result.stderr
             if "conflict" in output.lower():
                 return f"[Conflict] Merge conflicts detected. Please check `git status` to see affected files and resolve markers (<<<<, ====, >>>>) in the code.\n{output}"
             return f"[Error] Git pull failed:\n{output}"
             
-        return f"Successfully pulled latest changes:\n{result.stdout}"
+        return f"Successfully pulled latest changes from origin/{branch}:\n{result.stdout}"
     except Exception as exc:
         return f"[Error] Git pull operation failed: {exc}"
 
 @tool
-def git_commit_and_push(message: str) -> str:
-    """Stage all current changes, commit them with a message, and upload to the remote 'origin main'.
-    Use this to share your progress with the team. 
+def git_commit_and_push(message: str, branch: str = "main") -> str:
+    """Stage all current changes, commit them with a message, and upload to the remote.
+    Use this to share your progress with the team.
     Args:
         message: A concise summary of the changes being pushed.
+        branch: The remote branch to push to (default: 'main'). Use this to push to
+                feature branches, e.g. 'feature/my-task' or 'dev'.
     """
     try:
         # Verify we are in a git repository
@@ -92,24 +96,43 @@ def git_commit_and_push(message: str) -> str:
         if is_repo.returncode != 0:
             return f"[Error] Not a git repository (or any of the parent directories): {os.getcwd()}"
 
+        # Ensure the local branch exists; create and switch to it if not
+        current_branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True, text=True
+        ).stdout.strip()
+
+        if current_branch != branch:
+            # Check if the target branch exists locally
+            branch_exists = subprocess.run(
+                ["git", "show-ref", "--verify", f"refs/heads/{branch}"],
+                capture_output=True
+            ).returncode == 0
+            if branch_exists:
+                subprocess.run(["git", "checkout", branch], check=True)
+            else:
+                subprocess.run(["git", "checkout", "-b", branch], check=True)
+
         # Check for changes
         status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-        if not status.stdout.strip():
-            # Still try to push in case there are local commits not yet pushed
-            pass
-        else:
+        if status.stdout.strip():
             # Add and commit
             subprocess.run(["git", "add", "."], check=True)
             subprocess.run(["git", "commit", "-m", message], check=True)
-        
-        # Push specifically to origin main
-        result = subprocess.run(["git", "push", "-u", "origin", "main"], capture_output=True, text=True)
+        # else: no new changes but may still have un-pushed commits — fall through to push
+
+        # Push to the specified branch
+        result = subprocess.run(["git", "push", "-u", "origin", branch], capture_output=True, text=True)
         if result.returncode != 0:
             error_msg = result.stderr
             if "non-fast-forward" in error_msg or "fetch first" in error_msg:
-                return "[Error] Remote repository has changes that are not in your local branch. Your changes have already been committed locally. Please use the `git_pull` tool to sync before trying to push again."
+                return (
+                    f"[Error] Remote 'origin/{branch}' has changes not in your local branch. "
+                    "Your changes have already been committed locally. "
+                    "Please use the `git_pull` tool (with the same branch) to sync before pushing again."
+                )
             return f"[Error] Git push failed: {error_msg}"
-            
-        return f"Successfully committed and pushed: {message}"
+
+        return f"Successfully committed and pushed to origin/{branch}: {message}"
     except Exception as exc:
         return f"[Error] Git operation failed: {exc}"

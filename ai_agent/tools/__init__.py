@@ -1,5 +1,5 @@
-from .file_tools import rename_file
-from .execution_tools import run_bat, run_bash, run_python
+from .file_tools import rename_file, file_search, file_edit_lines
+from .execution_tools import run_bat, run_bash, run_python, process_status, process_kill
 from .interactive_tools import start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process
 from .whatsapp_tools import is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages
 from .research_tools import web_search, fetch_url
@@ -31,3 +31,16 @@ from .security_tools import (
 from .sas_tools import (
     sas_add_knowledge, sas_list_knowledge, sas_query_knowledge, sas_execute_sql
 )
+# --- New Tools ---
+from .clipboard_tools import clipboard_read, clipboard_write, clipboard_history
+from .http_tools import http_get, http_post, http_put, http_patch, http_delete, http_request, http_download
+from .document_tools import read_pdf, read_docx, read_excel, read_csv
+from .archive_tools import archive_create, archive_extract, archive_list
+from .sysinfo_tools import system_info, list_processes, get_env_vars, check_disk_space
+from .notification_tools import notify_desktop, notify_email, notify_sound
+from .diff_tools import diff_files, diff_file_content, patch_file, apply_unified_diff, git_diff, text_diff
+from .vector_memory_tools import memory_save, memory_search, memory_list, memory_delete, memory_backend_info
+from .ssh_tools import ssh_run, ssh_upload, ssh_download, ssh_run_script, ssh_check_port
+from .config_tools import json_get, json_set, json_delete, yaml_get, yaml_set, yaml_delete, json_query
+from .sqlite_tools import sqlite_query, sqlite_schema
+from .watcher_tools import watch_file, watch_until_stable

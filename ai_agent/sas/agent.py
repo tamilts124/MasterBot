@@ -28,7 +28,23 @@ from ..tools import (
     browser_set_visibility, stop_browser_session,
     browser_security_audit, browser_extract_endpoints, browser_analyze_waf, browser_map_params, browser_fuzz_params,
     start_subfinder, start_httpx, start_nuclei_scan, start_paramspider,
-    sas_add_knowledge, sas_list_knowledge, sas_query_knowledge, sas_execute_sql
+    sas_add_knowledge, sas_list_knowledge, sas_query_knowledge, sas_execute_sql,
+    # New tools
+    clipboard_read, clipboard_write,
+    http_get, http_post, http_put, http_patch, http_delete, http_request,
+    read_pdf, read_docx, read_excel, read_csv,
+    archive_create, archive_extract, archive_list,
+    system_info, list_processes, get_env_vars, check_disk_space,
+    notify_desktop, notify_email, notify_sound,
+    diff_files, diff_file_content, patch_file, apply_unified_diff, git_diff,
+    memory_save, memory_search, memory_list, memory_delete, memory_backend_info,
+    ssh_run, ssh_upload, ssh_download, ssh_run_script, ssh_check_port,
+    json_get, json_set, json_delete, yaml_get, yaml_set, yaml_delete, json_query,
+    sqlite_query, sqlite_schema,
+    watch_file, watch_until_stable,
+    file_search, file_edit_lines,
+    process_status, process_kill,
+    http_download, clipboard_history, text_diff
 )
 
 class TenaciousOllama(ChatOllama):
@@ -260,6 +276,8 @@ def build_agent(work_dir: Path, model_name: str, provider: str = "ollama", strea
         start_interactive_process, list_interactive_processes, get_process_history, send_to_process, stop_interactive_process,
         get_mouse_position, mouse_move, mouse_click, keyboard_type, keyboard_press, get_screen_size,
         git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push,
+        file_search, file_edit_lines,
+        process_status, process_kill,
     ]
     
     browser_tools = [
@@ -281,11 +299,71 @@ def build_agent(work_dir: Path, model_name: str, provider: str = "ollama", strea
     knowledge_tools = [
         sas_add_knowledge, sas_list_knowledge, sas_query_knowledge, sas_execute_sql
     ]
-    
+
+    clipboard_tool_list = [
+        clipboard_read, clipboard_write, clipboard_history,
+    ]
+
+    http_tool_list = [
+        http_get, http_post, http_put, http_patch, http_delete, http_request, http_download,
+    ]
+
+    document_tool_list = [
+        read_pdf, read_docx, read_excel, read_csv,
+    ]
+
+    archive_tool_list = [
+        archive_create, archive_extract, archive_list,
+    ]
+
+    sysinfo_tool_list = [
+        system_info, list_processes, get_env_vars, check_disk_space,
+    ]
+
+    notification_tool_list = [
+        notify_desktop, notify_sound,
+    ]
+
+    diff_tool_list = [
+        diff_files, diff_file_content, patch_file, apply_unified_diff, git_diff, text_diff
+    ]
+
+    vector_memory_tool_list = [
+        memory_save, memory_search, memory_list, memory_delete, memory_backend_info,
+    ]
+
+    ssh_tool_list = [
+        ssh_run, ssh_upload, ssh_download, ssh_run_script, ssh_check_port,
+    ]
+
+    config_tool_list = [
+        json_get, json_set, json_delete, yaml_get, yaml_set, yaml_delete, json_query,
+    ]
+
+    sqlite_tool_list = [
+        sqlite_query, sqlite_schema,
+    ]
+
+    watcher_tool_list = [
+        watch_file, watch_until_stable,
+    ]
+
     tools.extend(technical_tools)
     tools.extend(browser_tools)
     tools.extend(security_tools)
     tools.extend(knowledge_tools)
+    tools.extend(clipboard_tool_list)
+    tools.extend(http_tool_list)
+    tools.extend(document_tool_list)
+    tools.extend(archive_tool_list)
+    tools.extend(sysinfo_tool_list)
+    tools.extend(notification_tool_list)
+    tools.extend(diff_tool_list)
+    tools.extend(vector_memory_tool_list)
+    tools.extend(ssh_tool_list)
+    tools.extend(config_tool_list)
+    tools.extend(sqlite_tool_list)
+    tools.extend(watcher_tool_list)
 
     if whatsapp_jid:
         tools.extend([is_whatsapp_connected, send_whatsapp_message, get_whatsapp_last_messages])
@@ -317,11 +395,35 @@ def build_agent(work_dir: Path, model_name: str, provider: str = "ollama", strea
         "Use your tools to accomplish the task effectively.\n\n"
         "AVAILABLE TOOLS:\n"
         "- FILE OPERATIONS: read_file, write_file, list_directory, rename_file\n"
+        "- FILE SEARCH & EDIT: file_search, file_edit_lines\n"
         "- EXECUTION: run_bat, run_bash, run_python, start_interactive_process, send_to_process, get_process_history\n"
+        "- PROCESS CONTROL: process_status, process_kill\n"
         "- BROWSER AUTOMATION: start_browser_session, list_browser_sessions, browser_new_tab, browser_switch_tab, browser_close_tab, browser_navigate, browser_wait_for, browser_scroll, browser_get_view, browser_get_accessibility_tree, browser_click, browser_type, browser_eval, browser_save_cookies, browser_load_cookies, browser_get_local_storage, browser_set_local_storage, browser_get_network_logs, browser_get_console_logs, browser_screenshot, stop_browser_session\n"
         "- RESEARCH: web_search, fetch_url\n"
         "- VERSION CONTROL: git_status, git_pull, git_stash_save, git_stash_pop, git_commit_and_push\n"
-        "- SYSTEM: get_mouse_position, mouse_move, mouse_click, keyboard_type\n\n"
+        "- SYSTEM: get_mouse_position, mouse_move, mouse_click, keyboard_type\n"
+        "- CLIPBOARD: clipboard_read, clipboard_write\n"
+        "- HTTP CLIENT: http_get, http_post, http_put, http_patch, http_delete, http_request, http_download\n"
+        "- DOCUMENTS: read_pdf, read_docx, read_excel, read_csv\n"
+        "- ARCHIVES: archive_create, archive_extract, archive_list\n"
+        "- SYSTEM INFO: system_info, list_processes, get_env_vars, check_disk_space\n"
+        "- NOTIFICATIONS: notify_desktop, notify_email, notify_sound\n"
+        "- DIFF & PATCH: diff_files, diff_file_content, patch_file, apply_unified_diff, git_diff\n"
+        "- VECTOR MEMORY: memory_save, memory_search, memory_list, memory_delete, memory_backend_info\n"
+        "- SSH / REMOTE: ssh_check_port, ssh_run, ssh_run_script, ssh_upload, ssh_download\n"
+        "- CONFIG EDITOR: json_get, json_set, json_delete, yaml_get, yaml_set, yaml_delete, json_query\n"
+        "- SQLITE: sqlite_query, sqlite_schema\n"
+        "- FILE WATCHER: watch_file, watch_until_stable\n\n"
+        "CODE EDITING PROTOCOL:\n"
+        "1. Use file_search to locate the exact lines before editing — never read the whole file.\n"
+        "2. Use file_edit_lines for targeted line-range changes; only use write_file for new files.\n"
+        "3. ALWAYS call diff_file_content before write_file to preview changes.\n"
+        "4. For targeted edits use patch_file — faster and safer than rewriting the whole file.\n"
+        "5. Use git_diff after edits to confirm what will be committed.\n\n"
+        "MEMORY PROTOCOL:\n"
+        "1. Call memory_list at the start of each session to recall past findings.\n"
+        "2. After significant analysis or discoveries, call memory_save immediately.\n"
+        "3. Use memory_search with natural language — e.g. 'database connection logic'.\n\n"
         "BROWSER GUIDELINES:\n"
         "1. SESSION & TABS: Always start with 'start_browser_session'. Manage tabs with 'browser_new_tab', 'browser_switch_tab', and 'browser_list_tabs'.\n"
         "2. RESILIENCE: Use 'browser_wait_for' to wait for specific elements to appear before clicking. This is much more reliable than guessing.\n"

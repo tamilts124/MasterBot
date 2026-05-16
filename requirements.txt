@@ -13,3 +13,17 @@ certifi
 ddgs
 pyautogui
 langchain-anthropic
+# Document reading
+pypdf
+python-docx
+openpyxl
+# System info
+psutil
+# Vector memory (semantic search)
+chromadb
+sentence-transformers
+# Config tools (JSON/YAML patching)
+ruamel.yaml
+jq
+# File watcher (optional but recommended for OS-native events)
+watchdog
