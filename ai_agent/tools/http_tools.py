@@ -5,7 +5,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union, Any
 from langchain_core.tools import tool
 from .common import _truncate_output
 
@@ -135,112 +135,184 @@ def _format_response(result: dict) -> str:
 
 
 @tool
-def http_get(url: str, headers: str = "{}") -> str:
+def http_get(url: str, headers: Union[str, dict] = "{}") -> str:
     """Perform an HTTP GET request to a URL.
     Use this for reading REST API endpoints, downloading JSON data, or accessing authenticated APIs.
     Args:
         url: The full URL to request (e.g. 'https://api.example.com/users').
-        headers: JSON string of additional HTTP headers (e.g. '{\"Authorization\": \"Bearer TOKEN\"}').
+        headers: JSON string or dict of additional HTTP headers (e.g. '{"Authorization": "Bearer TOKEN"}').
     """
-    try:
-        h = json.loads(headers) if headers.strip() else {}
-    except Exception:
-        return "[Error] headers must be a valid JSON object string."
+    if isinstance(headers, str):
+        try:
+            h = json.loads(headers) if headers.strip() else {}
+        except Exception:
+            return "[Error] headers must be a valid JSON object string."
+    else:
+        h = headers or {}
+    
+    if not isinstance(h, dict):
+        return "[Error] headers must be a dictionary or a JSON object string."
+
     result = _http_request(url, method="GET", headers=h)
     return _format_response(result)
 
 
 @tool
-def http_post(url: str, body: str = "{}", headers: str = "{}") -> str:
+def http_post(url: str, body: Any = "{}", headers: Union[str, dict] = "{}") -> str:
     """Perform an HTTP POST request with a JSON body.
     Use this to create resources, submit forms, or call REST APIs that require a request body.
     Args:
         url: The full URL to POST to.
-        body: JSON string of the request body (e.g. '{\"name\": \"Alice\"}').
-        headers: JSON string of additional HTTP headers. Content-Type is set to application/json automatically.
+        body: JSON string or dict of the request body (e.g. '{"name": "Alice"}').
+        headers: JSON string or dict of additional HTTP headers. Content-Type is set to application/json automatically.
     """
-    try:
-        h = json.loads(headers) if headers.strip() else {}
-        json.loads(body)
-    except Exception as exc:
-        return f"[Error] Invalid JSON in body or headers: {exc}"
+    if isinstance(headers, str):
+        try:
+            h = json.loads(headers) if headers.strip() else {}
+        except Exception as exc:
+            return f"[Error] Invalid JSON in headers: {exc}"
+    else:
+        h = headers or {}
+
+    if not isinstance(h, dict):
+        return "[Error] headers must be a dictionary or a JSON object string."
+
+    # Process body
+    if isinstance(body, (dict, list)):
+        b_str = json.dumps(body)
+    elif isinstance(body, str):
+        # Validate it's JSON if it's a string, or just use it
+        try:
+            json.loads(body)
+            b_str = body
+        except Exception:
+            # Not valid JSON, but maybe it's just raw text? 
+            # For http_post we usually expect JSON, but let's be flexible.
+            b_str = body
+    else:
+        b_str = str(body)
 
     h.setdefault("Content-Type", "application/json")
-    result = _http_request(url, method="POST", headers=h, body=body)
+    result = _http_request(url, method="POST", headers=h, body=b_str)
     return _format_response(result)
 
 
 @tool
-def http_put(url: str, body: str = "{}", headers: str = "{}") -> str:
+def http_put(url: str, body: Any = "{}", headers: Union[str, dict] = "{}") -> str:
     """Perform an HTTP PUT request to update a resource.
     Use this to replace an existing resource via a REST API.
     Args:
         url: The full URL of the resource to update.
-        body: JSON string of the updated resource data.
-        headers: JSON string of additional HTTP headers.
+        body: JSON string or dict of the updated resource data.
+        headers: JSON string or dict of additional HTTP headers.
     """
-    try:
-        h = json.loads(headers) if headers.strip() else {}
-        json.loads(body)
-    except Exception as exc:
-        return f"[Error] Invalid JSON in body or headers: {exc}"
+    if isinstance(headers, str):
+        try:
+            h = json.loads(headers) if headers.strip() else {}
+        except Exception as exc:
+            return f"[Error] Invalid JSON in headers: {exc}"
+    else:
+        h = headers or {}
+
+    if not isinstance(h, dict):
+        return "[Error] headers must be a dictionary or a JSON object string."
+
+    if isinstance(body, (dict, list)):
+        b_str = json.dumps(body)
+    elif isinstance(body, str):
+        b_str = body
+    else:
+        b_str = str(body)
 
     h.setdefault("Content-Type", "application/json")
-    result = _http_request(url, method="PUT", headers=h, body=body)
+    result = _http_request(url, method="PUT", headers=h, body=b_str)
     return _format_response(result)
 
 
 @tool
-def http_patch(url: str, body: str = "{}", headers: str = "{}") -> str:
+def http_patch(url: str, body: Any = "{}", headers: Union[str, dict] = "{}") -> str:
     """Perform an HTTP PATCH request to partially update a resource.
     Use this when you only need to update specific fields of an existing resource.
     Args:
         url: The full URL of the resource to patch.
-        body: JSON string with only the fields to update.
-        headers: JSON string of additional HTTP headers.
+        body: JSON string or dict with only the fields to update.
+        headers: JSON string or dict of additional HTTP headers.
     """
-    try:
-        h = json.loads(headers) if headers.strip() else {}
-        json.loads(body)
-    except Exception as exc:
-        return f"[Error] Invalid JSON in body or headers: {exc}"
+    if isinstance(headers, str):
+        try:
+            h = json.loads(headers) if headers.strip() else {}
+        except Exception as exc:
+            return f"[Error] Invalid JSON in headers: {exc}"
+    else:
+        h = headers or {}
+
+    if not isinstance(h, dict):
+        return "[Error] headers must be a dictionary or a JSON object string."
+
+    if isinstance(body, (dict, list)):
+        b_str = json.dumps(body)
+    elif isinstance(body, str):
+        b_str = body
+    else:
+        b_str = str(body)
 
     h.setdefault("Content-Type", "application/json")
-    result = _http_request(url, method="PATCH", headers=h, body=body)
+    result = _http_request(url, method="PATCH", headers=h, body=b_str)
     return _format_response(result)
 
 
 @tool
-def http_delete(url: str, headers: str = "{}") -> str:
+def http_delete(url: str, headers: Union[str, dict] = "{}") -> str:
     """Perform an HTTP DELETE request to remove a resource.
     Use this to delete resources via REST APIs.
     Args:
         url: The full URL of the resource to delete.
-        headers: JSON string of additional HTTP headers (e.g. auth token).
+        headers: JSON string or dict of additional HTTP headers (e.g. auth token).
     """
-    try:
-        h = json.loads(headers) if headers.strip() else {}
-    except Exception:
-        return "[Error] headers must be a valid JSON object string."
+    if isinstance(headers, str):
+        try:
+            h = json.loads(headers) if headers.strip() else {}
+        except Exception:
+            return "[Error] headers must be a valid JSON object string."
+    else:
+        h = headers or {}
+
+    if not isinstance(h, dict):
+        return "[Error] headers must be a dictionary or a JSON object string."
+
     result = _http_request(url, method="DELETE", headers=h)
     return _format_response(result)
 
 
 @tool
-def http_request(url: str, method: str = "GET", body: str = "", headers: str = "{}") -> str:
+def http_request(url: str, method: str = "GET", body: Any = "", headers: Union[str, dict] = "{}") -> str:
     """Perform a fully custom HTTP request with any method, body, and headers.
     Use this as a catch-all when the specific http_get/post/put/patch/delete tools don't fit.
     Args:
         url: The full URL to request.
         method: HTTP method — GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS, etc.
-        body: Raw request body string (can be JSON, form data, or empty).
-        headers: JSON string of HTTP headers to include.
+        body: Raw request body string, dict, or list (can be JSON, form data, or empty).
+        headers: JSON string or dict of HTTP headers to include.
     """
-    try:
-        h = json.loads(headers) if headers.strip() else {}
-    except Exception:
-        return "[Error] headers must be a valid JSON object string."
-    result = _http_request(url, method=method.upper(), headers=h, body=body or None)
+    if isinstance(headers, str):
+        try:
+            h = json.loads(headers) if headers.strip() else {}
+        except Exception:
+            return "[Error] headers must be a valid JSON object string."
+    else:
+        h = headers or {}
+
+    if not isinstance(h, dict):
+        return "[Error] headers must be a dictionary or a JSON object string."
+
+    if isinstance(body, (dict, list)):
+        b_str = json.dumps(body)
+    elif isinstance(body, str):
+        b_str = body
+    else:
+        b_str = str(body) if body is not None else None
+
+    result = _http_request(url, method=method.upper(), headers=h, body=b_str)
     return _format_response(result)
 
 

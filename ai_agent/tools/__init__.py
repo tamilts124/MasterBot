@@ -26,7 +26,8 @@ from .browser_tools import (
 from .security_tools import (
     browser_security_audit, browser_extract_endpoints, 
     browser_analyze_waf, browser_map_params, browser_fuzz_params,
-    start_subfinder, start_httpx, start_nuclei_scan, start_paramspider
+    start_subfinder, start_httpx, start_nuclei_scan, start_paramspider,
+    dns_lookup, ssl_inspect, port_scan, start_sqlmap
 )
 from .sas_tools import (
     sas_add_knowledge, sas_list_knowledge, sas_query_knowledge, sas_execute_sql

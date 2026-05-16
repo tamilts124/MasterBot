@@ -28,6 +28,7 @@ from ..tools import (
     browser_set_visibility, stop_browser_session,
     browser_security_audit, browser_extract_endpoints, browser_analyze_waf, browser_map_params, browser_fuzz_params,
     start_subfinder, start_httpx, start_nuclei_scan, start_paramspider,
+    dns_lookup, ssl_inspect, port_scan, start_sqlmap,
     sas_add_knowledge, sas_list_knowledge, sas_query_knowledge, sas_execute_sql,
     # New tools
     clipboard_read, clipboard_write,
@@ -64,13 +65,14 @@ class TenaciousOllama(ChatOllama):
         for msg in messages:
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    # Defensive check: ensure tc is a dictionary and has 'args'
-                    if isinstance(tc, dict) and 'args' in tc:
-                        # Truncate args for clean console display
-                        clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in tc['args'].items()}
-                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}({clean_args})")
-                    elif isinstance(tc, dict) and 'name' in tc:
-                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}(...)")
+                    if isinstance(tc, dict):
+                        name = tc.get("name", "Unknown")
+                        args = tc.get("args", {})
+                        if isinstance(args, dict):
+                            clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in args.items()}
+                        else:
+                            clean_args = str(args)
+                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {name}({clean_args})")
         
         # Use only the keys passed during initialization
         all_keys = []
@@ -135,8 +137,14 @@ class TenaciousOllama(ChatOllama):
         for msg in messages:
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in tc['args'].items()}
-                    print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}({clean_args})")
+                    if isinstance(tc, dict):
+                        name = tc.get("name", "Unknown")
+                        args = tc.get("args", {})
+                        if isinstance(args, dict):
+                            clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in args.items()}
+                        else:
+                            clean_args = str(args)
+                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {name}({clean_args})")
 
         all_keys = []
         if hasattr(self, "internal_api_keys") and self.internal_api_keys:
@@ -175,11 +183,14 @@ class TenaciousAnthropic(ChatAnthropic):
         for msg in messages:
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    if isinstance(tc, dict) and 'args' in tc:
-                        clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in tc['args'].items()}
-                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}({clean_args})")
-                    elif isinstance(tc, dict) and 'name' in tc:
-                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}(...)")
+                    if isinstance(tc, dict):
+                        name = tc.get("name", "Unknown")
+                        args = tc.get("args", {})
+                        if isinstance(args, dict):
+                            clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in args.items()}
+                        else:
+                            clean_args = str(args)
+                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {name}({clean_args})")
         
         all_keys = []
         if hasattr(self, "internal_api_keys") and self.internal_api_keys:
@@ -227,8 +238,14 @@ class TenaciousAnthropic(ChatAnthropic):
         for msg in messages:
             if hasattr(msg, "tool_calls") and msg.tool_calls:
                 for tc in msg.tool_calls:
-                    clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in tc['args'].items()}
-                    print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {tc['name']}({clean_args})")
+                    if isinstance(tc, dict):
+                        name = tc.get("name", "Unknown")
+                        args = tc.get("args", {})
+                        if isinstance(args, dict):
+                            clean_args = {k: (f"{str(v)[:100]}...{str(v)[-50:]}" if isinstance(v, str) and len(str(v)) > 200 else v) for k, v in args.items()}
+                        else:
+                            clean_args = str(args)
+                        print(f"\n[Brain {agent_id}] 🛠️ Calling Tool: {name}({clean_args})")
 
         all_keys = []
         if hasattr(self, "internal_api_keys") and self.internal_api_keys:
@@ -293,7 +310,8 @@ def build_agent(work_dir: Path, model_name: str, provider: str = "ollama", strea
     security_tools = [
         browser_security_audit, browser_extract_endpoints, 
         browser_analyze_waf, browser_map_params, browser_fuzz_params,
-        start_subfinder, start_httpx, start_nuclei_scan, start_paramspider
+        start_subfinder, start_httpx, start_nuclei_scan, start_paramspider,
+        dns_lookup, ssl_inspect, port_scan, start_sqlmap,
     ]
     
     knowledge_tools = [

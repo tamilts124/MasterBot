@@ -3,5 +3,6 @@ from .browser_extended import (
     browser_analyze_waf, browser_map_params, browser_fuzz_params
 )
 from .recon_tools import (
-    start_subfinder, start_httpx, start_nuclei_scan, start_paramspider
+    start_subfinder, start_httpx, start_nuclei_scan, start_paramspider,
+    dns_lookup, ssl_inspect, port_scan, start_sqlmap
 )
